@@ -407,7 +407,7 @@ export class FHECounterContract {
     }
   }
 
-  async canUserDecryptCount(userAddress: string): Promise<boolean> {
+  async canUserDecryptCount(_userAddress: string): Promise<boolean> {
     if (!this.contract) throw new Error('Contract not initialized');
     try {
       // FHE.isSenderAllowed uses msg.sender automatically
@@ -418,15 +418,18 @@ export class FHECounterContract {
     }
   }
 
+  /**
+   * Decrypt the current encrypted count value.
+   *
+   * @param userAddress - User address for decryption permission check
+   * @param abortSignal - Optional abort signal for cancellation
+   * @returns Promise resolving to decrypted number or null if failed
+   */
   async decryptCount(userAddress: string, abortSignal?: AbortSignal): Promise<number | null> {
     try {
       const encryptedCount = await this.getCount();
       const result = await fhevmClient.decryptUint32(encryptedCount, this.contractAddress, userAddress, abortSignal);
-      if (typeof result === 'object' && result.value === null) {
-        console.warn(result.reason);  // Log hint
-        return null;
-      }
-      return result as number;
+      return result;
     } catch (error) {
       // Re-throw cancellation errors
       if (abortSignal?.aborted || (error instanceof Error && error.message.includes('Operation cancelled'))) {

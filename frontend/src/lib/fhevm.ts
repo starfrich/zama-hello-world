@@ -217,9 +217,15 @@ export class FHEVMClient {
   }
 
   /**
-   * Decrypt an encrypted value using the relayer (user decryption) with cancellation support
+   * Decrypt an encrypted value using the relayer (user decryption) with cancellation support.
+   *
+   * @param handle - Encrypted value handle
+   * @param contractAddress - Contract address
+   * @param userAddress - User address
+   * @param abortSignal - Optional abort signal for cancellation
+   * @returns Promise resolving to decrypted number, or null if failed/cancelled
    */
-  async decryptUint32(handle: string, contractAddress: string, userAddress: string, abortSignal?: AbortSignal) {
+  async decryptUint32(handle: string, contractAddress: string, userAddress: string, abortSignal?: AbortSignal): Promise<number | null> {
     if (!this.instance || !this.signer) {
       throw new Error('FHEVM client not initialized');
     }
@@ -357,8 +363,9 @@ export class FHEVMClient {
             errorMsg.includes('denied') ||
             errorMsg.includes('user cancelled') ||
             errorMsg.includes('action_rejected')) {
-          // Don't throw error for user rejections - return special object instead
-          return { value: null, reason: 'User cancelled signature request' };
+          // User rejected - return null (not an error)
+          console.info('User cancelled decryption signature');
+          return null;
         }
       }
 
@@ -366,7 +373,7 @@ export class FHEVMClient {
       if (error instanceof Error && error.message.includes('not authorized')) {
         // Log as info, not error (expected for new users)
         console.info('User not authorized for decryption (expected for new users)');
-        return { value: null, reason: 'User not authorized. Perform increment/decrement first to grant permission.' };
+        return null;
       }
 
       // Only log unexpected errors
@@ -376,14 +383,19 @@ export class FHEVMClient {
   }
 
   /**
-   * Check if a value can be decrypted by the current user
+   * Check if a value can be decrypted by the current user.
+   *
+   * @param handle - Encrypted value handle
+   * @param contractAddress - Contract address
+   * @param userAddress - User address
+   * @returns Promise resolving to true if user can decrypt, false otherwise
    */
   async canDecrypt(handle: string, contractAddress: string, userAddress: string): Promise<boolean> {
     try {
       const result = await this.decryptUint32(handle, contractAddress, userAddress);
-      return result !== null && typeof result === 'number';  // Adjust buat handle new return type
+      return result !== null && typeof result === 'number';
     } catch (error) {
-      // Specific catch buat auth error—return false tanpa log berisik
+      // Specific catch for auth error—return false without noisy log
       if (error instanceof Error && error.message.includes('not authorized')) {
         return false;
       }

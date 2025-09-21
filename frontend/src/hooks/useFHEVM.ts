@@ -5,12 +5,12 @@
  * operations including initialization, encryption, decryption, and transaction
  * management with proper state management and error handling.
  *
- * @author FHEVM Tutorial Team
+ * @author Starfish
  * @version 1.0.0
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useAccount, useWalletClient, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import { fhevmClient } from '@/lib/fhevm';
 import { createFHECounterContract, type CounterOperationResult } from '@/lib/contracts';
@@ -92,47 +92,11 @@ interface UseFHEVMReturn {
  *
  * @returns Object containing all counter operations, state, and utilities
  *
- * @example
- * ```typescript
- * function CounterComponent() {
- *   const {
- *     isInitialized,
- *     encryptedCount,
- *     decryptedCount,
- *     canDecrypt,
- *     incrementCounter,
- *     decryptCount,
- *     loadingStates,
- *     error
- *   } = useFHEVM();
- *
- *   const handleIncrement = async () => {
- *     const result = await incrementCounter(5);
- *     if (result.success) {
- *       console.log('Counter incremented!');
- *     }
- *   };
- *
- *   return (
- *     <div>
- *       <p>Encrypted: {encryptedCount}</p>
- *       <p>Decrypted: {decryptedCount}</p>
- *       <button onClick={handleIncrement} disabled={loadingStates.incrementing}>
- *         {loadingStates.incrementing ? 'Processing...' : 'Increment'}
- *       </button>
- *       {canDecrypt && (
- *         <button onClick={decryptCount} disabled={loadingStates.decrypting}>
- *           Decrypt
- *         </button>
- *       )}
- *     </div>
- *   );
- * }
- * ```
  */
 export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -145,6 +109,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     resetting: false,
   });
   const [contract, setContract] = useState<ReturnType<typeof createFHECounterContract> | null>(null);
+  const [currentContractAddress, setCurrentContractAddress] = useState<string | undefined>(contractAddress);
   const [encryptedCount, setEncryptedCount] = useState<string | null>(null);
   const [decryptedCount, setDecryptedCount] = useState<number | null>(null);
   const [canDecrypt, setCanDecrypt] = useState(false);
@@ -156,6 +121,143 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   // Stable refs to avoid useEffect dependency issues
   const isInitializedRef = useRef(false);
   const contractRef = useRef<ReturnType<typeof createFHECounterContract> | null>(null);
+  const lastChainIdRef = useRef<number | undefined>(chainId);
+
+  /**
+   * Utility function to generate unique toast IDs for operations.
+   * Ensures consistent ID format across all toast notifications.
+   *
+   * @param operation - The operation type (e.g., 'decrypt', 'increment')
+   * @returns Unique toast ID string
+   */
+  const generateToastId = useCallback((operation: string): string => {
+    return `${operation}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }, []);
+
+  /**
+   * Retry configuration for different operation types.
+   */
+  const RETRY_CONFIG = {
+    maxRetries: 3,
+    baseDelay: 1000, // 1 second
+    maxDelay: 8000,  // 8 seconds max
+  };
+
+  /**
+   * Determines if an error should trigger a retry attempt.
+   * Filters out user rejections and permanent errors.
+   *
+   * @param error - Error object or message
+   * @returns Whether the error is retryable
+   */
+  const isRetryableError = useCallback((error: Error | string): boolean => {
+    const errorMessage = typeof error === 'string' ? error : error.message;
+
+    // Never retry user rejections
+    if (errorMessage.includes('User rejected') ||
+        errorMessage.includes('user denied') ||
+        errorMessage.includes('rejected signature') ||
+        errorMessage.includes('ACTION_REJECTED')) {
+      return false;
+    }
+
+    // Never retry invalid addresses or contract errors
+    if (errorMessage.includes('invalid address') ||
+        errorMessage.includes('contract not found') ||
+        errorMessage.includes('invalid contract')) {
+      return false;
+    }
+
+    // Retry network, timeout, and gas-related errors
+    return errorMessage.includes('network') ||
+           errorMessage.includes('timeout') ||
+           errorMessage.includes('connection') ||
+           errorMessage.includes('gas') ||
+           errorMessage.includes('nonce') ||
+           errorMessage.includes('underpriced') ||
+           errorMessage.includes('replacement transaction underpriced') ||
+           errorMessage.includes('failed to estimate gas');
+  }, []);
+
+  /**
+   * Calculates exponential backoff delay for retry attempts.
+   *
+   * @param attempt - Current attempt number (0-based)
+   * @returns Delay in milliseconds
+   */
+  const calculateBackoffDelay = useCallback((attempt: number): number => {
+    const delay = RETRY_CONFIG.baseDelay * Math.pow(2, attempt);
+    return Math.min(delay, RETRY_CONFIG.maxDelay);
+  }, []);
+
+  /**
+   * Generic retry wrapper for async operations with exponential backoff.
+   *
+   * @param operation - Async function to execute
+   * @param operationName - Name for logging and toast messages
+   * @param abortSignal - AbortSignal for cancellation
+   * @param toastId - Toast ID for progress updates
+   * @returns Result of the operation
+   */
+  const withRetry = useCallback(async <T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    abortSignal?: AbortSignal,
+    toastId?: string
+  ): Promise<T> => {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        // Check if operation was cancelled
+        if (abortSignal?.aborted) {
+          throw new Error('Operation cancelled');
+        }
+
+        // Execute the operation
+        return await operation();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // Check if operation was cancelled
+        if (abortSignal?.aborted) {
+          throw new Error('Operation cancelled');
+        }
+
+        // Don't retry if error is not retryable
+        if (!isRetryableError(lastError)) {
+          throw lastError;
+        }
+
+        // Don't retry on last attempt
+        if (attempt === RETRY_CONFIG.maxRetries) {
+          throw lastError;
+        }
+
+        // Calculate delay and show retry toast
+        const delay = calculateBackoffDelay(attempt);
+        const retryNumber = attempt + 1;
+
+        if (toastId) {
+          toast.loading(
+            `${operationName} failed. Retrying ${retryNumber}/${RETRY_CONFIG.maxRetries} in ${delay/1000}s...`,
+            { id: toastId }
+          );
+        }
+
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, delay));
+
+        // Check if operation was cancelled during delay
+        if (abortSignal?.aborted) {
+          throw new Error('Operation cancelled');
+        }
+      }
+    }
+
+    // This should never be reached, but TypeScript requires it
+    throw lastError || new Error('Unknown retry error');
+  }, [isRetryableError, calculateBackoffDelay]);
 
   // AbortController refs for operation cancellation
   const abortControllersRef = useRef<{
@@ -221,8 +323,15 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
         throw new Error('Operation cancelled');
       }
 
-      // Create contract instance
-      const contractInstance = createFHECounterContract(contractAddress);
+      /**
+       * Create contract instance only if address changed or not exists.
+       * This prevents redundant contract re-initialization on every call.
+       */
+      let contractInstance = contractRef.current;
+      if (!contractInstance || currentContractAddress !== contractAddress) {
+        contractInstance = createFHECounterContract(contractAddress);
+        setCurrentContractAddress(contractAddress);
+      }
       contractInstance.initialize(signer);
       setContract(contractInstance);
 
@@ -245,18 +354,41 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [walletClient, address, isConnected, contractAddress, isInitialized, isInitializing]);
 
-  // Refresh the current count
+  /**
+   * Type-safe Ethereum address validation.
+   * Ensures address is a valid hex string with proper format.
+   *
+   * @param addr - Address to validate
+   * @returns Type predicate confirming valid address
+   */
+  const isValidAddress = useCallback((addr: string | undefined): addr is string => {
+    return typeof addr === 'string' && addr.length === 42 && addr.startsWith('0x');
+  }, []);
+
+  /**
+   * Refresh the current encrypted count and user permissions.
+   * Updates encrypted count value and checks if current user can decrypt.
+   */
   const refreshCount = useCallback(async () => {
-    if (!contract || !address) return;
+    if (!contract || !isValidAddress(address)) return;
 
     try {
       setLoadingStates(prev => ({ ...prev, refreshing: true }));
-      const count = await contract.getCount();
-      setEncryptedCount(count);
 
-      const canUserDecrypt = await contract.canUserDecryptCount(address);
-      setCanDecrypt(canUserDecrypt);
-      setDecryptedCount(null);
+      // Use retry mechanism for refresh operations
+      await withRetry(
+        async () => {
+          const count = await contract.getCount();
+          setEncryptedCount(count);
+
+          const canUserDecrypt = await contract.canUserDecryptCount(address);
+          setCanDecrypt(canUserDecrypt);
+          setDecryptedCount(null);
+        },
+        'Refresh count',
+        undefined, // No abort signal for refresh
+        undefined  // No toast for background refresh
+      );
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to refresh count';
@@ -264,9 +396,12 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     } finally {
       setLoadingStates(prev => ({ ...prev, refreshing: false }));
     }
-  }, [contract, address]);
+  }, [contract, address, isValidAddress]);
 
-  // Decrypt the current count
+  /**
+   * Decrypt the current encrypted count for the connected user.
+   * Requires user authorization and valid decryption permissions.
+   */
   const decryptCount = useCallback(async () => {
     if (!contract || !address) return;
 
@@ -279,7 +414,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     const abortController = new AbortController();
     abortControllersRef.current.decrypting = abortController;
 
-    const decryptToastId = `decrypt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const decryptToastId = generateToastId('decrypt');
 
     try {
       setLoadingStates(prev => ({ ...prev, decrypting: true }));
@@ -312,15 +447,29 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
       // Don't show error if operation was cancelled
       if (!abortController.signal.aborted) {
-        // Check for user rejection - don't set as error state
-        if (errorMessage.includes('User rejected') || errorMessage.includes('user denied') || errorMessage.includes('rejected signature')) {
+        // Improved permission error categorization
+        const isUserRejection = errorMessage.includes('User rejected') ||
+                              errorMessage.includes('user denied') ||
+                              errorMessage.includes('rejected signature') ||
+                              errorMessage.includes('ACTION_REJECTED');
+
+        const isPermissionError = errorMessage.includes('not authorized') ||
+                                 errorMessage.includes('permission denied') ||
+                                 errorMessage.includes('unauthorized');
+
+        if (isUserRejection) {
           // User rejection is not an error state - just dismiss toast quietly
           toast.dismiss(decryptToastId);
-          // Don't set error state for user rejections
+        } else if (isPermissionError) {
+          // Show helpful permission error without setting error state
+          toast.error('🔐 Grant decryption permission first by clicking "Allow Decryption"', {
+            id: decryptToastId,
+            duration: 4000
+          });
         } else {
+          // Other errors should be shown and set in error state
           setError(errorMessage);
-          const finalError = errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage;
-          toast.error(finalError, { id: decryptToastId });
+          toast.error(errorMessage, { id: decryptToastId });
         }
       }
     } finally {
@@ -332,7 +481,10 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [contract, address]);
 
-  // Increment counter
+  /**
+   * Increment the encrypted counter by specified value.
+   * Encrypts the value client-side before sending to contract.
+   */
   const incrementCounter = useCallback(async (value: number): Promise<CounterOperationResult> => {
     if (!contract || !address) {
       const error = 'Contract not initialized or wallet not connected';
@@ -349,32 +501,43 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     const abortController = new AbortController();
     abortControllersRef.current.incrementing = abortController;
 
-    const txToastId = `increment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const txToastId = generateToastId('increment');
 
     try {
       setLoadingStates(prev => ({ ...prev, incrementing: true }));
       setError(null); // Clear previous errors
       toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
-      // Check if operation was cancelled
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+      // Wrap the contract operation with retry logic
+      const result = await withRetry(
+        async () => {
+          // Check if operation was cancelled
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      const result = await contract.increment(value, address);
+          const contractResult = await contract.increment(value, address);
 
-      // Check if operation was cancelled after async operation
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+          // Check if operation was cancelled after async operation
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      if (result.success) {
-        toast.success(`Successfully incremented by ${value}`, { id: txToastId });
-        await refreshCount();
-      } else {
-        toast.error(result.error || 'Transaction failed', { id: txToastId });
-      }
+          // Throw error if contract operation failed (to trigger retry)
+          if (!contractResult.success) {
+            throw new Error(contractResult.error || 'Transaction failed');
+          }
 
+          return contractResult;
+        },
+        'Increment transaction',
+        abortController.signal,
+        txToastId
+      );
+
+      // Success case
+      toast.success(`Successfully incremented by ${value}`, { id: txToastId });
+      await refreshCount();
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to increment counter';
@@ -400,7 +563,10 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [contract, address, refreshCount]);
 
-  // Decrement counter
+  /**
+   * Decrement the encrypted counter by specified value.
+   * Encrypts the value client-side before sending to contract.
+   */
   const decrementCounter = useCallback(async (value: number): Promise<CounterOperationResult> => {
     if (!contract || !address) {
       const error = 'Contract not initialized or wallet not connected';
@@ -417,33 +583,43 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     const abortController = new AbortController();
     abortControllersRef.current.decrementing = abortController;
 
-    const txToastId = `decrement-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const txToastId = generateToastId('decrement');
 
     try {
       setLoadingStates(prev => ({ ...prev, decrementing: true }));
       setError(null); // Clear previous errors
       toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
-      // Check if operation was cancelled
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+      // Wrap the contract operation with retry logic
+      const result = await withRetry(
+        async () => {
+          // Check if operation was cancelled
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      const result = await contract.decrement(value, address);
+          const contractResult = await contract.decrement(value, address);
 
-      // Check if operation was cancelled after async operation
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+          // Check if operation was cancelled after async operation
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      if (result.success) {
-        toast.success(`Successfully decremented by ${value}`, { id: txToastId });
-        // Refresh count after successful transaction
-        await refreshCount();
-      } else {
-        toast.error(result.error || 'Transaction failed', { id: txToastId });
-      }
+          // Throw error if contract operation failed (to trigger retry)
+          if (!contractResult.success) {
+            throw new Error(contractResult.error || 'Transaction failed');
+          }
 
+          return contractResult;
+        },
+        'Decrement transaction',
+        abortController.signal,
+        txToastId
+      );
+
+      // Success case
+      toast.success(`Successfully decremented by ${value}`, { id: txToastId });
+      await refreshCount();
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to decrement counter';
@@ -469,7 +645,10 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [contract, address, refreshCount]);
 
-  // Reset counter
+  /**
+   * Reset the encrypted counter to zero.
+   * Sends encrypted zero value to contract reset function.
+   */
   const resetCounter = useCallback(async (): Promise<CounterOperationResult> => {
     if (!contract || !address) {
       const error = 'Contract not initialized or wallet not connected';
@@ -486,32 +665,43 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     const abortController = new AbortController();
     abortControllersRef.current.resetting = abortController;
 
-    const txToastId = `reset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const txToastId = generateToastId('reset');
 
     try {
       setLoadingStates(prev => ({ ...prev, resetting: true }));
       setError(null); // Clear previous errors
       toast.loading('Resetting counter...', { id: txToastId });
 
-      // Check if operation was cancelled
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+      // Wrap the contract operation with retry logic
+      const result = await withRetry(
+        async () => {
+          // Check if operation was cancelled
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      const result = await contract.reset();
+          const contractResult = await contract.reset();
 
-      // Check if operation was cancelled after async operation
-      if (abortController.signal.aborted) {
-        throw new Error('Operation cancelled');
-      }
+          // Check if operation was cancelled after async operation
+          if (abortController.signal.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-      if (result.success) {
-        toast.success('Counter reset to zero successfully', { id: txToastId });
-        await refreshCount();
-      } else {
-        toast.error(result.error || 'Reset failed', { id: txToastId });
-      }
+          // Throw error if contract operation failed (to trigger retry)
+          if (!contractResult.success) {
+            throw new Error(contractResult.error || 'Reset failed');
+          }
 
+          return contractResult;
+        },
+        'Reset transaction',
+        abortController.signal,
+        txToastId
+      );
+
+      // Success case
+      toast.success('Counter reset to zero successfully', { id: txToastId });
+      await refreshCount();
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reset counter';
@@ -537,12 +727,34 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [contract, address, refreshCount]);
 
-  // Cancel all operations when wallet disconnects
+  // Cancel all operations when wallet disconnects or network changes
   useEffect(() => {
     if (!isConnected || !address || !walletClient) {
       cancelAllOperations();
+      setIsInitialized(false);
+      setContract(null);
+      setEncryptedCount(null);
+      setDecryptedCount(null);
+      setCanDecrypt(false);
+      setError(null);
     }
   }, [isConnected, address, walletClient, cancelAllOperations]);
+
+  // Handle network changes
+  useEffect(() => {
+    if (lastChainIdRef.current !== undefined && lastChainIdRef.current !== chainId && isConnected) {
+      // Network changed - reset everything
+      cancelAllOperations();
+      setIsInitialized(false);
+      setContract(null);
+      setEncryptedCount(null);
+      setDecryptedCount(null);
+      setCanDecrypt(false);
+      setError(null);
+      toast.info('Network changed. Please reconnect.');
+    }
+    lastChainIdRef.current = chainId;
+  }, [chainId, isConnected, cancelAllOperations]);
 
   // Cleanup all operations on unmount
   useEffect(() => {
@@ -551,37 +763,35 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     };
   }, [cancelAllOperations]);
 
+  // Handle contract address changes
+  useEffect(() => {
+    if (contractAddress !== currentContractAddress && isInitialized) {
+      // Contract address changed - reset and re-initialize
+      setIsInitialized(false);
+      setContract(null);
+      setEncryptedCount(null);
+      setDecryptedCount(null);
+      setCanDecrypt(false);
+      setCurrentContractAddress(contractAddress);
+    }
+  }, [contractAddress, currentContractAddress, isInitialized]);
+
   // Initialize when wallet connects - using refs to avoid dependency issues
   useEffect(() => {
     if (isConnected && address && walletClient && !isInitializedRef.current && !isInitializing) {
       initialize();
     }
-  }, [isConnected, address, walletClient, isInitializing]); // Removed callback dependencies
+  }, [isConnected, address, walletClient, isInitializing, contractAddress]); // Added contractAddress
 
-  // Refresh count when initialized - using refs to avoid dependency issues
+  /**
+   * Auto-refresh count when hook is initialized.
+   * Uses existing refreshCount function to avoid code duplication.
+   */
   useEffect(() => {
-    if (isInitializedRef.current && contractRef.current && address) {
-      const refreshData = async () => {
-        try {
-          setLoadingStates(prev => ({ ...prev, refreshing: true }));
-          const count = await contractRef.current!.getCount();
-          setEncryptedCount(count);
-
-          const canUserDecrypt = await contractRef.current!.canUserDecryptCount(address);
-          setCanDecrypt(canUserDecrypt);
-          setDecryptedCount(null);
-
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'Failed to refresh count';
-          setError(errorMessage);
-        } finally {
-          setLoadingStates(prev => ({ ...prev, refreshing: false }));
-        }
-      };
-
-      refreshData();
+    if (isInitialized && contract && isValidAddress(address)) {
+      refreshCount();
     }
-  }, [isInitialized, contract, address]); // Safe dependencies
+  }, [isInitialized, contract, address, refreshCount]); // Use the existing refreshCount function
 
   return {
     isInitialized,
