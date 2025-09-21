@@ -10,10 +10,21 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 contract FHECounter is SepoliaConfig {
     euint32 private _count;
 
+    constructor() {
+        _count = FHE.asEuint32(0);  // Explicitly initialize to encrypted 0
+        FHE.allowThis(_count);      // Allow the contract itself to access (permanent, for future ops)
+        // Opsional: FHE.allow(_count, msg.sender); // Kalau mau allow deployer juga dari awal
+    }
+
     /// @notice Returns the current count
     /// @return The current encrypted count
     function getCount() external view returns (euint32) {
         return _count;
+    }
+
+    /// @notice Check if msg.sender can decrypt the count
+    function canUserDecrypt() external view returns (bool) {
+        return FHE.isSenderAllowed(_count);
     }
 
     /// @notice Increments the counter by a specified encrypted value.

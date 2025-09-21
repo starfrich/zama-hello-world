@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';  // UPDATED: Import toast buat hint
 import { useFHEVM } from '@/hooks/useFHEVM';
 import { validateUint32Input, formatEncryptedValue } from '@/lib/fhevm';
 import { Loader2, Lock, Unlock, Plus, Minus, RefreshCw, Eye } from 'lucide-react';
@@ -63,6 +64,15 @@ export function Counter({ contractAddress }: CounterProps) {
     await decrementCounter(Number(inputValue));
     setInputValue('');
     setInputError(null);
+  };
+
+  // UPDATED: Handler buat decrypt dengan hint kalau gak bisa
+  const handleDecrypt = async () => {
+    if (!canDecrypt) {
+      toast.warning('Grant permission first by performing an increment or decrement operation!');
+      return;
+    }
+    await decryptCount();
   };
 
   if (!isConnected) {
@@ -158,23 +168,24 @@ export function Counter({ contractAddress }: CounterProps) {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
-                  {canDecrypt && decryptedCount !== null ? (
+                  {decryptedCount !== null ? (
                     <span className="text-2xl font-bold text-green-600 dark:text-green-400">
                       {decryptedCount}
                     </span>
                   ) : (
                     <span className="text-gray-500">
-                      {canDecrypt ? 'Click to decrypt' : 'No access'}
+                      {canDecrypt ? 'Ready to decrypt' : 'No access yet'}
                     </span>
                   )}
-                  {canDecrypt && decryptedCount === null && (
+                  {canDecrypt && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={decryptCount}
-                      disabled={isLoading}
+                      onClick={handleDecrypt}
+                      disabled={isLoading || decryptedCount !== null}
                     >
-                      Decrypt
+                      <Eye className="w-4 h-4 mr-1" />
+                      {decryptedCount !== null ? 'Refreshed' : 'Decrypt'}
                     </Button>
                   )}
                 </div>
@@ -187,9 +198,14 @@ export function Counter({ contractAddress }: CounterProps) {
               ✓ You can decrypt this value
             </Badge>
           ) : (
-            <Badge variant="secondary">
-              🔒 Only authorized users can decrypt
-            </Badge>
+            <div className="space-y-1">  {/* UPDATED: Wrap badge + hint */}
+              <Badge variant="secondary">
+                🔒 Only authorized users can decrypt
+              </Badge>
+              <p className="text-sm text-gray-600 dark:text-gray-400">  {/* UPDATED: Hint text */}
+                Perform an increment or decrement operation first to grant yourself permission.
+              </p>
+            </div>
           )}
         </div>
 
@@ -248,7 +264,7 @@ export function Counter({ contractAddress }: CounterProps) {
               <span>Processing...</span>
               <span>Please wait</span>
             </div>
-            <Progress value={undefined} className="h-2" />
+            <Progress value={undefined} className="h-2" aria-label="Processing transaction" />  {/* UPDATED: Tambah aria-label */}
           </div>
         )}
 

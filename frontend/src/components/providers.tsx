@@ -4,7 +4,6 @@ import * as React from 'react';
 import { WagmiProvider } from 'wagmi';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { Toaster } from 'sonner';
 import { wagmiConfig } from '@/lib/wallet';
 
 // Create a client
@@ -27,17 +26,7 @@ export function Providers({ children }: ProvidersProps) {
             overlayBlur: 'small',
           })}
         >
-          {children}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: 'hsl(var(--background))',
-                color: 'hsl(var(--foreground))',
-                border: '1px solid hsl(var(--border))',
-              },
-            }}
-          />
+          <React.Fragment key="children">{children}</React.Fragment>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

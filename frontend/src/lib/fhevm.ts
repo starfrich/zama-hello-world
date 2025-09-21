@@ -16,6 +16,8 @@ export const FHEVM_CONFIG: FHEVMConfig = {
   gatewayChainId: 55815, // Gateway chain
 };
 
+let sdkInitialized = false;
+
 export class FHEVMClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private instance: any = null;
@@ -44,8 +46,11 @@ export class FHEVMClient {
       this.provider = provider;
       this.signer = signer;
 
-      // Initialize the SDK first
-      await initSDK();
+      // Initialize the SDK only once globally
+      if (!sdkInitialized) {  // <-- TAMB AH DI SINI (line ~39)
+        await initSDK();
+        sdkInitialized = true;
+      }
 
       // Create instance with Sepolia config, use window.ethereum for network
       const config = {
@@ -132,7 +137,7 @@ export class FHEVMClient {
       let formattedSignature = signature;
 
       // Try with 0x prefix first, if it fails we'll retry without
-      try {
+        try {
         const result = await this.instance.userDecrypt(
           handleContractPairs,
           keypair.privateKey,
@@ -164,10 +169,14 @@ export class FHEVMClient {
           const decryptedValue = result[handle];
           return parseInt(decryptedValue, 10);
         }
-        throw error;
+        throw error;  // Re-throw non-signature errors
       }
     } catch (error) {
-      console.error('Error decrypting value:', error);
+      console.warn('Decryption failed (likely authorization):', error);  // Warn, bukan error, biar console gak merah
+      if (error instanceof Error && error.message.includes('not authorized')) {
+        // Custom handling: Return null + hint
+        return { value: null, reason: 'User not authorized. Perform increment/decrement first to grant permission.' };
+      }
       throw new Error('Failed to decrypt value');
     }
   }
@@ -177,9 +186,14 @@ export class FHEVMClient {
    */
   async canDecrypt(handle: string, contractAddress: string, userAddress: string): Promise<boolean> {
     try {
-      await this.decryptUint32(handle, contractAddress, userAddress);
-      return true;
-    } catch {
+      const result = await this.decryptUint32(handle, contractAddress, userAddress);
+      return result !== null && typeof result === 'number';  // Adjust buat handle new return type
+    } catch (error) {
+      // Specific catch buat auth error—return false tanpa log berisik
+      if (error instanceof Error && error.message.includes('not authorized')) {
+        return false;
+      }
+      console.error('Unexpected decryption check error:', error);  // Log only unexpected
       return false;
     }
   }

@@ -30,6 +30,8 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const [decryptedCount, setDecryptedCount] = useState<number | null>(null);
   const [canDecrypt, setCanDecrypt] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [permissionHint, setPermissionHint] = useState<string | null>(null);
 
   // Initialize FHEVM client and contract
   const initialize = useCallback(async () => {
@@ -71,16 +73,10 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       const count = await contract.getCount();
       setEncryptedCount(count);
 
-      // Check if user can decrypt
       const canUserDecrypt = await contract.canUserDecryptCount(address);
       setCanDecrypt(canUserDecrypt);
+      setDecryptedCount(null); 
 
-      if (canUserDecrypt) {
-        const decrypted = await contract.decryptCount(address);
-        setDecryptedCount(decrypted);
-      } else {
-        setDecryptedCount(null);
-      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to refresh count';
       setError(errorMessage);
@@ -95,14 +91,15 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
     try {
       setIsLoading(true);
+      toast.loading('Requesting decryption... Preparing signature');  // UPDATED: Granular toast
+
       const decrypted = await contract.decryptCount(address);
       setDecryptedCount(decrypted);
-      setCanDecrypt(true);
       toast.success('Count decrypted successfully');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to decrypt count';
       setError(errorMessage);
-      toast.error(errorMessage);
+      toast.error(errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -116,24 +113,29 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return { success: false, error };
     }
 
+    let txToastId: string = '';
+
     try {
       setIsLoading(true);
-      toast.loading('Encrypting and sending transaction...');
+      txToastId = String(toast.loading('Encrypting and sending transaction...'));
 
       const result = await contract.increment(value, address);
 
       if (result.success) {
-        toast.success(`Successfully incremented by ${value}`);
-        // Refresh count after successful transaction
+        toast.success(`Successfully incremented by ${value}`, { id: txToastId });
         await refreshCount();
       } else {
-        toast.error(result.error || 'Transaction failed');
+        toast.error(result.error || 'Transaction failed', { id: txToastId });
       }
 
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to increment counter';
-      toast.error(errorMessage);
+      if (txToastId) {
+        toast.error(errorMessage, { id: txToastId });
+      } else {
+        toast.error(errorMessage);
+      }
       return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
@@ -148,24 +150,30 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return { success: false, error };
     }
 
+    let txToastId: string = '';
+
     try {
       setIsLoading(true);
-      toast.loading('Encrypting and sending transaction...');
+      txToastId = String(toast.loading('Encrypting and sending transaction...'));
 
       const result = await contract.decrement(value, address);
 
       if (result.success) {
-        toast.success(`Successfully decremented by ${value}`);
+        toast.success(`Successfully decremented by ${value}`, { id: txToastId });
         // Refresh count after successful transaction
         await refreshCount();
       } else {
-        toast.error(result.error || 'Transaction failed');
+        toast.error(result.error || 'Transaction failed', { id: txToastId });
       }
 
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to decrement counter';
-      toast.error(errorMessage);
+      if (txToastId) {
+        toast.error(errorMessage, { id: txToastId });
+      } else {
+        toast.error(errorMessage);
+      }
       return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);

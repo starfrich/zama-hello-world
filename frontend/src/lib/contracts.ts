@@ -52,6 +52,13 @@ export const FHE_COUNTER_ABI = [
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "canUserDecrypt",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
   }
 ];
 
@@ -178,37 +185,29 @@ export class FHECounterContract {
     }
   }
 
-  /**
-   * Decrypt the current count for the user
-   */
-  async decryptCount(userAddress: string): Promise<number | null> {
+  async canUserDecryptCount(userAddress: string): Promise<boolean> {
+    if (!this.contract) throw new Error('Contract not initialized');
     try {
-      const encryptedCount = await this.getCount();
-      const decryptedValue = await fhevmClient.decryptUint32(
-        encryptedCount,
-        this.contractAddress,
-        userAddress
-      );
-      return decryptedValue;
-    } catch (error) {
-      console.error('Error decrypting count:', error);
-      return null;
+      // UPDATED: Call on-chain view, no decrypt attempt
+      const isAllowed = await this.contract.canUserDecrypt({ from: userAddress });
+      return isAllowed;
+    } catch {
+      return false;
     }
   }
 
-  /**
-   * Check if the user can decrypt the current count
-   */
-  async canUserDecryptCount(userAddress: string): Promise<boolean> {
+  async decryptCount(userAddress: string): Promise<number | null> {
     try {
       const encryptedCount = await this.getCount();
-      return await fhevmClient.canDecrypt(
-        encryptedCount,
-        this.contractAddress,
-        userAddress
-      );
-    } catch {
-      return false;
+      const result = await fhevmClient.decryptUint32(encryptedCount, this.contractAddress, userAddress);
+      if (typeof result === 'object' && result.value === null) {
+        console.warn(result.reason);  // Log hint
+        return null;
+      }
+      return result as number;
+    } catch (error) {
+      console.error('Error decrypting count:', error);
+      return null;
     }
   }
 }
