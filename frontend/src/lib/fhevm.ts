@@ -1,14 +1,41 @@
+/**
+ * @fileoverview FHEVM Client Library for Encrypted Blockchain Operations
+ *
+ * This module provides a high-level interface for interacting with Fully Homomorphic
+ * Encryption Virtual Machine (FHEVM) on Ethereum. It handles encrypted value operations,
+ * user authorization, and secure decryption workflows.
+ *
+ * @author Starfish
+ * @version 1.0.0
+ */
+
 import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/web';
 import { ethers } from 'ethers';
 
+/**
+ * Configuration interface for FHEVM network settings.
+ *
+ * @interface FHEVMConfig
+ */
 export interface FHEVMConfig {
+  /** RPC endpoint for the Ethereum network */
   network: string;
+  /** URL of the FHEVM relayer service */
   relayerUrl: string;
+  /** Ethereum chain ID (e.g., 11155111 for Sepolia) */
   chainId: number;
+  /** Gateway chain ID for FHEVM operations */
   gatewayChainId: number;
 }
 
-// Sepolia testnet configuration for FHEVM
+/**
+ * Default FHEVM configuration for Sepolia testnet.
+ *
+ * This configuration is used for development and testing. Production deployments
+ * should use environment variables to override these defaults.
+ *
+ * @constant {FHEVMConfig}
+ */
 export const FHEVM_CONFIG: FHEVMConfig = {
   network: process.env.NEXT_PUBLIC_RPC_URL || 'https://eth-sepolia.public.blastapi.io',
   relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL || 'https://relayer.testnet.zama.cloud',
@@ -16,21 +43,84 @@ export const FHEVM_CONFIG: FHEVMConfig = {
   gatewayChainId: 55815, // Gateway chain
 };
 
+/** @private Global flag to prevent duplicate SDK initialization */
 let sdkInitialized = false;
 
+/**
+ * FHEVM Client for handling encrypted computations on blockchain.
+ *
+ * This class provides a comprehensive interface for:
+ * - Initializing FHEVM SDK with wallet integration
+ * - Encrypting values for confidential smart contract interactions
+ * - Decrypting encrypted values with proper user authorization
+ * - Managing cryptographic operations and user permissions
+ *
+ * @example
+ * ```typescript
+ * import { fhevmClient } from '@/lib/fhevm';
+ *
+ * // Initialize with wallet
+ * await fhevmClient.initialize(provider, signer);
+ *
+ * // Encrypt a value
+ * const encrypted = await fhevmClient.encryptUint32(42, userAddress, contractAddress);
+ *
+ * // Decrypt a value
+ * const result = await fhevmClient.decryptUint32(handle, contractAddress, userAddress);
+ * ```
+ *
+ * @class FHEVMClient
+ */
 export class FHEVMClient {
+  /** @private FHEVM SDK instance for cryptographic operations */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private instance: any = null;
+
+  /** @private Ethereum provider for blockchain interactions */
   private provider: ethers.Provider | null = null;
+
+  /** @private Ethereum signer for transaction signing and authentication */
   private signer: ethers.Signer | null = null;
+
+  /** @private Flag indicating whether the client has been initialized */
   private isInitialized = false;
 
+  /**
+   * Creates a new FHEVMClient instance.
+   *
+   * The client is not ready for use until `initialize()` is called.
+   *
+   * @constructor
+   */
   constructor() {
     // Instance will be created during initialization
   }
 
   /**
-   * Initialize the FHEVM client with a provider and signer
+   * Initializes the FHEVM client with Ethereum provider and signer.
+   *
+   * This method sets up the FHEVM SDK, configures network settings, and prepares
+   * the client for encrypted operations. It prevents duplicate initialization and
+   * ensures the client is ready for encryption/decryption operations.
+   *
+   * @param provider - Ethereum provider for blockchain interactions
+   * @param signer - Ethereum signer for transaction signing and authentication
+   *
+   * @returns Promise resolving to the initialized client instance
+   *
+   * @throws {Error} When not running in a browser environment
+   * @throws {Error} When provider or signer is invalid
+   * @throws {Error} When SDK initialization fails
+   *
+   * @example
+   * ```typescript
+   * const provider = new ethers.BrowserProvider(window.ethereum);
+   * const signer = await provider.getSigner();
+   * await fhevmClient.initialize(provider, signer);
+   *
+   * // Client is now ready for encrypted operations
+   * const encrypted = await fhevmClient.encryptUint32(42, userAddr, contractAddr);
+   * ```
    */
   async initialize(provider: ethers.Provider, signer: ethers.Signer) {
     if (this.isInitialized) {
@@ -47,7 +137,7 @@ export class FHEVMClient {
       this.signer = signer;
 
       // Initialize the SDK only once globally
-      if (!sdkInitialized) {  // <-- TAMB AH DI SINI (line ~39)
+      if (!sdkInitialized) {
         await initSDK();
         sdkInitialized = true;
       }
@@ -69,7 +159,37 @@ export class FHEVMClient {
   }
 
   /**
-   * Encrypt a 32-bit unsigned integer for use with FHEVM
+   * Encrypts a 32-bit unsigned integer for confidential smart contract operations.
+   *
+   * This method generates the necessary cryptographic proof and encrypted value
+   * that can be safely sent to FHEVM smart contracts without revealing the original value.
+   * The encrypted data ensures privacy while maintaining the ability to perform
+   * homomorphic operations on-chain.
+   *
+   * @param value - The plaintext integer to encrypt (0 to 4,294,967,295)
+   * @param userAddress - Ethereum address of the user performing the operation
+   * @param contractAddress - Target smart contract address for the encrypted value
+   *
+   * @returns Promise resolving to encrypted data object containing:
+   *   - `inputEuint32`: The encrypted value handle as hex string
+   *   - `inputProof`: Cryptographic proof for contract verification
+   *
+   * @throws {Error} When FHEVM client is not initialized
+   * @throws {Error} When value is outside valid uint32 range (0-4294967295)
+   * @throws {Error} When encryption operation fails
+   *
+   * @example
+   * ```typescript
+   * // Encrypt a value for increment operation
+   * const encrypted = await fhevmClient.encryptUint32(
+   *   42,
+   *   '0x1234567890123456789012345678901234567890',
+   *   '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'
+   * );
+   *
+   * // Use in contract call
+   * await contract.increment(encrypted.inputEuint32, encrypted.inputProof);
+   * ```
    */
   async encryptUint32(value: number, userAddress: string, contractAddress: string) {
     if (!this.instance) {
@@ -97,16 +217,26 @@ export class FHEVMClient {
   }
 
   /**
-   * Decrypt an encrypted value using the relayer (user decryption)
+   * Decrypt an encrypted value using the relayer (user decryption) with cancellation support
    */
-  async decryptUint32(handle: string, contractAddress: string, userAddress: string) {
+  async decryptUint32(handle: string, contractAddress: string, userAddress: string, abortSignal?: AbortSignal) {
     if (!this.instance || !this.signer) {
       throw new Error('FHEVM client not initialized');
+    }
+
+    // Check if operation was cancelled before starting
+    if (abortSignal?.aborted) {
+      throw new Error('Operation cancelled');
     }
 
     try {
       // Generate keypair for decryption
       const keypair = this.instance.generateKeypair();
+
+      // Check cancellation after keypair generation
+      if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+      }
 
       // Set up handle-contract pairs
       const handleContractPairs = [{
@@ -125,58 +255,122 @@ export class FHEVMClient {
         durationDays
       );
 
-      // Sign the typed data
-      const signature = await this.signer.signTypedData(
+      // Check cancellation before signing
+      if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+      }
+
+      // Sign the typed data with cancellation race
+      const signaturePromise = this.signer.signTypedData(
         eip712.domain,
         { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
         eip712.message
       );
 
-      // Perform user decryption
+      let signature: string;
+      if (abortSignal) {
+        signature = await Promise.race([
+          signaturePromise,
+          new Promise<never>((_, reject) => {
+            if (abortSignal.aborted) {
+              reject(new Error('Operation cancelled'));
+              return;
+            }
+            const onAbort = () => reject(new Error('Operation cancelled'));
+            abortSignal.addEventListener('abort', onAbort, { once: true });
+          })
+        ]);
+      } else {
+        signature = await signaturePromise;
+      }
+
+      // Check cancellation before decryption
+      if (abortSignal?.aborted) {
+        throw new Error('Operation cancelled');
+      }
+
+      // Perform user decryption with cancellation support
       // Note: Some FHEVM versions expect signature with 0x prefix, others without
       let formattedSignature = signature;
 
-      // Try with 0x prefix first, if it fails we'll retry without
-        try {
-        const result = await this.instance.userDecrypt(
+      // Helper function to create cancellable userDecrypt
+      const createCancellableDecrypt = (sig: string) => {
+        const decryptPromise = this.instance.userDecrypt(
           handleContractPairs,
           keypair.privateKey,
           keypair.publicKey,
-          formattedSignature,
+          sig,
           [contractAddress],
           userAddress,
           startTimeStamp,
           durationDays
         );
 
+        if (!abortSignal) return decryptPromise;
+
+        return Promise.race([
+          decryptPromise,
+          new Promise<never>((_, reject) => {
+            if (abortSignal.aborted) {
+              reject(new Error('Operation cancelled'));
+              return;
+            }
+            const onAbort = () => reject(new Error('Operation cancelled'));
+            abortSignal.addEventListener('abort', onAbort, { once: true });
+          })
+        ]);
+      };
+
+      // Try with 0x prefix first, if it fails we'll retry without
+      try {
+        const result = await createCancellableDecrypt(formattedSignature);
         const decryptedValue = result[handle];
         return parseInt(decryptedValue, 10);
       } catch (error) {
+        // Check if cancelled
+        if (abortSignal?.aborted || (error instanceof Error && error.message.includes('Operation cancelled'))) {
+          throw new Error('Operation cancelled');
+        }
+
         // If 0x prefix fails, try without it
         if (error instanceof Error && error.message.includes('0x is not of valid length')) {
           formattedSignature = signature.replace('0x', '');
-          const result = await this.instance.userDecrypt(
-            handleContractPairs,
-            keypair.privateKey,
-            keypair.publicKey,
-            formattedSignature,
-            [contractAddress],
-            userAddress,
-            startTimeStamp,
-            durationDays
-          );
-
+          const result = await createCancellableDecrypt(formattedSignature);
           const decryptedValue = result[handle];
           return parseInt(decryptedValue, 10);
         }
         throw error;  // Re-throw non-signature errors
       }
     } catch (error) {
-      console.warn('Decryption failed (likely authorization):', error);  // Warn, bukan error, biar console gak merah
+      // Check if operation was cancelled first (highest priority)
+      if (abortSignal?.aborted || (error instanceof Error && error.message.includes('Operation cancelled'))) {
+        // Don't log anything for cancellation - it's expected
+        throw new Error('Operation cancelled');
+      }
+
+      // Handle user rejection without logging as error
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('user rejected') ||
+            errorMsg.includes('user denied') ||
+            errorMsg.includes('rejected') ||
+            errorMsg.includes('denied') ||
+            errorMsg.includes('user cancelled') ||
+            errorMsg.includes('action_rejected')) {
+          // Don't throw error for user rejections - return special object instead
+          return { value: null, reason: 'User cancelled signature request' };
+        }
+      }
+
+      // Handle authorization errors
       if (error instanceof Error && error.message.includes('not authorized')) {
-        // Custom handling: Return null + hint
+        // Log as info, not error (expected for new users)
+        console.info('User not authorized for decryption (expected for new users)');
         return { value: null, reason: 'User not authorized. Perform increment/decrement first to grant permission.' };
       }
+
+      // Only log unexpected errors
+      console.warn('Unexpected decryption error:', error);
       throw new Error('Failed to decrypt value');
     }
   }

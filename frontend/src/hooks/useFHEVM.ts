@@ -1,3 +1,14 @@
+/**
+ * @fileoverview Custom React Hook for FHEVM Counter Operations
+ *
+ * This module provides a comprehensive React hook for managing FHEVM counter
+ * operations including initialization, encryption, decryption, and transaction
+ * management with proper state management and error handling.
+ *
+ * @author FHEVM Tutorial Team
+ * @version 1.0.0
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, useWalletClient } from 'wagmi';
 import { ethers } from 'ethers';
@@ -5,6 +16,14 @@ import { fhevmClient } from '@/lib/fhevm';
 import { createFHECounterContract, type CounterOperationResult } from '@/lib/contracts';
 import { toast } from 'sonner';
 
+/**
+ * Loading states for different FHEVM operations.
+ *
+ * This interface provides granular loading state management for better UX,
+ * allowing the UI to show specific loading indicators for each operation.
+ *
+ * @interface LoadingStates
+ */
 interface LoadingStates {
   initializing: boolean;
   refreshing: boolean;
@@ -14,23 +33,103 @@ interface LoadingStates {
   resetting: boolean;
 }
 
+/**
+ * Return type for the useFHEVM hook.
+ *
+ * This interface defines all the state, functions, and utilities provided
+ * by the useFHEVM hook for managing FHEVM counter operations.
+ *
+ * @interface UseFHEVMReturn
+ */
 interface UseFHEVMReturn {
+  /** Whether the FHEVM client and contract are initialized */
   isInitialized: boolean;
-  isLoading: boolean; // Keep for backward compatibility - true if any operation is loading
+  /** Legacy loading state - true if any operation is loading */
+  isLoading: boolean;
+  /** Granular loading states for specific operations */
   loadingStates: LoadingStates;
+  /** Initialized contract instance, null if not ready */
   contract: ReturnType<typeof createFHECounterContract> | null;
+  /** Current encrypted counter value handle */
   encryptedCount: string | null;
+  /** Decrypted counter value if available */
   decryptedCount: number | null;
+  /** Whether current user can decrypt the counter */
   canDecrypt: boolean;
+  /** Function to increment the counter by a value */
   incrementCounter: (value: number) => Promise<CounterOperationResult>;
+  /** Function to decrement the counter by a value */
   decrementCounter: (value: number) => Promise<CounterOperationResult>;
+  /** Function to reset the counter to zero */
   resetCounter: () => Promise<CounterOperationResult>;
+  /** Function to refresh the encrypted counter value */
   refreshCount: () => Promise<void>;
+  /** Function to decrypt the current counter value */
   decryptCount: () => Promise<void>;
+  /** Function to cancel all ongoing operations */
   cancelAllOperations: () => void;
+  /** Current error message if any operation failed */
   error: string | null;
 }
 
+/**
+ * Custom React hook for managing FHEVM counter operations.
+ *
+ * This hook provides a complete interface for interacting with FHEVM counter contracts,
+ * handling initialization, state management, encrypted operations, and error handling.
+ * It integrates with wagmi for wallet management and provides granular loading states
+ * for optimal user experience.
+ *
+ * Features:
+ * - Automatic FHEVM client and contract initialization
+ * - Encrypted counter operations (increment, decrement, reset)
+ * - Secure decryption with user authorization
+ * - Comprehensive error handling and user feedback
+ * - Operation cancellation support with AbortController
+ * - Real-time state synchronization
+ *
+ * @param contractAddress - Optional contract address (uses env default if not provided)
+ *
+ * @returns Object containing all counter operations, state, and utilities
+ *
+ * @example
+ * ```typescript
+ * function CounterComponent() {
+ *   const {
+ *     isInitialized,
+ *     encryptedCount,
+ *     decryptedCount,
+ *     canDecrypt,
+ *     incrementCounter,
+ *     decryptCount,
+ *     loadingStates,
+ *     error
+ *   } = useFHEVM();
+ *
+ *   const handleIncrement = async () => {
+ *     const result = await incrementCounter(5);
+ *     if (result.success) {
+ *       console.log('Counter incremented!');
+ *     }
+ *   };
+ *
+ *   return (
+ *     <div>
+ *       <p>Encrypted: {encryptedCount}</p>
+ *       <p>Decrypted: {decryptedCount}</p>
+ *       <button onClick={handleIncrement} disabled={loadingStates.incrementing}>
+ *         {loadingStates.incrementing ? 'Processing...' : 'Increment'}
+ *       </button>
+ *       {canDecrypt && (
+ *         <button onClick={decryptCount} disabled={loadingStates.decrypting}>
+ *           Decrypt
+ *         </button>
+ *       )}
+ *     </div>
+ *   );
+ * }
+ * ```
+ */
 export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
@@ -192,11 +291,18 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
         throw new Error('Operation cancelled');
       }
 
-      const decrypted = await contract.decryptCount(address);
+      const decrypted = await contract.decryptCount(address, abortController.signal);
 
       // Check if operation was cancelled after async operation
       if (abortController.signal.aborted) {
         throw new Error('Operation cancelled');
+      }
+
+      // Check if decryption returned null (could be user rejection or auth issue)
+      if (decrypted === null) {
+        // Just dismiss the toast quietly - user might have cancelled
+        toast.dismiss(decryptToastId);
+        return;
       }
 
       setDecryptedCount(decrypted);
@@ -206,9 +312,16 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
       // Don't show error if operation was cancelled
       if (!abortController.signal.aborted) {
-        setError(errorMessage);
-        const finalError = errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage;
-        toast.error(finalError, { id: decryptToastId });
+        // Check for user rejection - don't set as error state
+        if (errorMessage.includes('User rejected') || errorMessage.includes('user denied') || errorMessage.includes('rejected signature')) {
+          // User rejection is not an error state - just dismiss toast quietly
+          toast.dismiss(decryptToastId);
+          // Don't set error state for user rejections
+        } else {
+          setError(errorMessage);
+          const finalError = errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage;
+          toast.error(finalError, { id: decryptToastId });
+        }
       }
     } finally {
       // Clean up AbortController reference
@@ -268,7 +381,13 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
       // Don't show error if operation was cancelled
       if (!abortController.signal.aborted) {
-        toast.error(errorMessage, { id: txToastId });
+        // Check for user rejection - don't treat as error
+        if (errorMessage.includes('User rejected') || errorMessage.includes('user denied') || errorMessage.includes('ACTION_REJECTED') || errorMessage.includes('rejected')) {
+          // Dismiss loading toast quietly for user rejection
+          toast.dismiss(txToastId);
+        } else {
+          toast.error(errorMessage, { id: txToastId });
+        }
       }
 
       return { success: false, error: errorMessage };
@@ -331,7 +450,13 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
       // Don't show error if operation was cancelled
       if (!abortController.signal.aborted) {
-        toast.error(errorMessage, { id: txToastId });
+        // Check for user rejection - don't treat as error
+        if (errorMessage.includes('User rejected') || errorMessage.includes('user denied') || errorMessage.includes('ACTION_REJECTED') || errorMessage.includes('rejected')) {
+          // Dismiss loading toast quietly for user rejection
+          toast.dismiss(txToastId);
+        } else {
+          toast.error(errorMessage, { id: txToastId });
+        }
       }
 
       return { success: false, error: errorMessage };
@@ -393,7 +518,13 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
       // Don't show error if operation was cancelled
       if (!abortController.signal.aborted) {
-        toast.error(errorMessage, { id: txToastId });
+        // Check for user rejection - don't treat as error
+        if (errorMessage.includes('User rejected') || errorMessage.includes('user denied') || errorMessage.includes('ACTION_REJECTED') || errorMessage.includes('rejected')) {
+          // Dismiss loading toast quietly for user rejection
+          toast.dismiss(txToastId);
+        } else {
+          toast.error(errorMessage, { id: txToastId });
+        }
       }
 
       return { success: false, error: errorMessage };
