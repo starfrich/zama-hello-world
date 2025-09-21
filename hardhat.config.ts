@@ -9,6 +9,9 @@ import type { HardhatUserConfig } from "hardhat/config";
 import { vars } from "hardhat/config";
 import "solidity-coverage";
 
+import "./tasks/accounts";
+import "./tasks/FHECounter";
+
 // Run 'npx hardhat vars setup' to see the list of variables that need to be set
 
 const MNEMONIC: string = vars.get("MNEMONIC", "test test test test test test test test test test test junk");
@@ -35,10 +38,6 @@ const config: HardhatUserConfig = {
         mnemonic: MNEMONIC,
       },
       chainId: 31337,
-      forking: {
-        url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
-        blockNumber: 6070000,
-      },
     },
     anvil: {
       accounts: {
@@ -70,6 +69,7 @@ const config: HardhatUserConfig = {
     settings: {
       metadata: {
         // Not including the metadata hash
+        // https://github.com/paulrberg/hardhat-template/issues/31
         bytecodeHash: "none",
       },
       // Disable the optimizer when debugging

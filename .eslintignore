@@ -21,8 +21,8 @@ types
 .pnp.*
 coverage.json
 pnpm-lock.yaml
-package-lock.json
 yarn.lock
+package-lock.json
 .claude
 CLAUDE.md
 docs_internal
