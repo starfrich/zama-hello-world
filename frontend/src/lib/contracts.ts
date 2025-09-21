@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { fhevmClient } from './fhevm';
 
 // FHECounter contract ABI - we'll update this after compilation
+// FHECounter contract ABI - updated after compilation verification
 export const FHE_COUNTER_ABI = [
   {
     "inputs": [],
@@ -10,7 +11,7 @@ export const FHE_COUNTER_ABI = [
       {
         "internalType": "euint32",
         "name": "",
-        "type": "bytes"
+        "type": "bytes32"  // Changed from "bytes" to "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -94,7 +95,7 @@ export class FHECounterContract {
 
     try {
       const result = await this.contract.getCount();
-      return result;
+      return result;  // Now decodes correctly as bytes32 (hex string)
     } catch (error) {
       console.error('Error getting count:', error);
       throw new Error('Failed to get count');

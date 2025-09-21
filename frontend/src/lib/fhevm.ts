@@ -110,7 +110,7 @@ export class FHEVMClient {
       }];
 
       // Create EIP712 signature for verification
-      const startTimeStamp = Date.now();
+      const startTimeStamp = Math.floor(Date.now() / 1000);  // Convert ms to seconds
       const durationDays = 1; // 1 day validity
 
       const eip712 = this.instance.createEIP712(
