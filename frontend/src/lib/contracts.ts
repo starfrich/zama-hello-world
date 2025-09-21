@@ -242,8 +242,9 @@ export class FHECounterContract {
   async canUserDecryptCount(userAddress: string): Promise<boolean> {
     if (!this.contract) throw new Error('Contract not initialized');
     try {
-      // UPDATED: Call on-chain view, no decrypt attempt
-      const isAllowed = await this.contract.canUserDecrypt({ from: userAddress });
+      // FIXED: Remove { from: userAddress } - ethers.js v6 auto-detects sender
+      // FHE.isSenderAllowed uses msg.sender automatically
+      const isAllowed = await this.contract.canUserDecrypt();
       return isAllowed;
     } catch {
       return false;

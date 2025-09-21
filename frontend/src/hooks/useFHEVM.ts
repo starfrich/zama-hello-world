@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, useWalletClient } from 'wagmi';
 import { ethers } from 'ethers';
 import { fhevmClient } from '@/lib/fhevm';
@@ -25,6 +25,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const { data: walletClient } = useWalletClient();
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [contract, setContract] = useState<ReturnType<typeof createFHECounterContract> | null>(null);
   const [encryptedCount, setEncryptedCount] = useState<string | null>(null);
@@ -32,11 +33,25 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const [canDecrypt, setCanDecrypt] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Stable refs to avoid useEffect dependency issues
+  const isInitializedRef = useRef(false);
+  const contractRef = useRef<ReturnType<typeof createFHECounterContract> | null>(null);
+
+  // Update refs when state changes
+  useEffect(() => {
+    isInitializedRef.current = isInitialized;
+    contractRef.current = contract;
+  });
+
   // Initialize FHEVM client and contract
   const initialize = useCallback(async () => {
     if (!walletClient || !address || !isConnected) return;
 
+    // Prevent concurrent initialization calls
+    if (isInitialized || isInitializing) return;
+
     try {
+      setIsInitializing(true);
       setIsLoading(true);
       setError(null);
 
@@ -59,9 +74,10 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
+      setIsInitializing(false);
       setIsLoading(false);
     }
-  }, [walletClient, address, isConnected, contractAddress]);
+  }, [walletClient, address, isConnected, contractAddress, isInitialized, isInitializing]);
 
   // Refresh the current count
   const refreshCount = useCallback(async () => {
@@ -92,6 +108,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
     try {
       setIsLoading(true);
+      setError(null); // Clear previous errors
       toast.loading('Requesting decryption... Preparing signature', { id: decryptToastId });
 
       const decrypted = await contract.decryptCount(address);
@@ -120,6 +137,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
     try {
       setIsLoading(true);
+      setError(null); // Clear previous errors
       toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
       const result = await contract.increment(value, address);
@@ -153,6 +171,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
     try {
       setIsLoading(true);
+      setError(null); // Clear previous errors
       toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
       const result = await contract.decrement(value, address);
@@ -187,6 +206,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
 
     try {
       setIsLoading(true);
+      setError(null); // Clear previous errors
       toast.loading('Resetting counter...', { id: txToastId });
 
       const result = await contract.reset();
@@ -208,19 +228,37 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
   }, [contract, address, refreshCount]);
 
-  // Initialize when wallet connects
+  // Initialize when wallet connects - using refs to avoid dependency issues
   useEffect(() => {
-    if (isConnected && address && walletClient && !isInitialized) {
+    if (isConnected && address && walletClient && !isInitializedRef.current && !isInitializing) {
       initialize();
     }
-  }, [isConnected, address, walletClient, isInitialized, initialize]);
+  }, [isConnected, address, walletClient, isInitializing]); // Removed callback dependencies
 
-  // Refresh count when initialized
+  // Refresh count when initialized - using refs to avoid dependency issues
   useEffect(() => {
-    if (isInitialized && contract) {
-      refreshCount();
+    if (isInitializedRef.current && contractRef.current && address) {
+      const refreshData = async () => {
+        try {
+          setIsLoading(true);
+          const count = await contractRef.current!.getCount();
+          setEncryptedCount(count);
+
+          const canUserDecrypt = await contractRef.current!.canUserDecryptCount(address);
+          setCanDecrypt(canUserDecrypt);
+          setDecryptedCount(null);
+
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to refresh count';
+          setError(errorMessage);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      refreshData();
     }
-  }, [isInitialized, contract, refreshCount]);
+  }, [isInitialized, contract, address]); // Safe dependencies
 
   return {
     isInitialized,
