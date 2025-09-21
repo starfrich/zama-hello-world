@@ -29,6 +29,25 @@ export interface FHEVMConfig {
 }
 
 /**
+ * Gas configuration interface for TFHE operations.
+ *
+ * TFHE operations have unpredictable gas costs, especially TFHE.decrypt().
+ * This interface provides configuration for handling TFHE-specific gas estimation.
+ *
+ * @interface TFHEGasConfig
+ */
+export interface TFHEGasConfig {
+  /** Buffer percentage for TFHE operations (default: 20%) */
+  bufferPercentage: number;
+  /** Maximum gas limit for TFHE operations (default: 10,000,000) */
+  maxGasLimit: number;
+  /** Fallback gas amount if estimation fails (default: 500000) */
+  fallbackGas: number;
+  /** Special buffer for TFHE.decrypt operations (default: 50%) */
+  decryptBufferPercentage: number;
+}
+
+/**
  * Default FHEVM configuration for Sepolia testnet.
  *
  * This configuration is used for development and testing. Production deployments
@@ -41,6 +60,21 @@ export const FHEVM_CONFIG: FHEVMConfig = {
   relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL || 'https://relayer.testnet.zama.cloud',
   chainId: 11155111, // Sepolia testnet
   gatewayChainId: 55815, // Gateway chain
+};
+
+/**
+ * Default gas configuration for TFHE operations.
+ *
+ * These values are specifically tuned for TFHE operations which have
+ * unpredictable gas costs, especially TFHE.decrypt() operations.
+ *
+ * @constant {TFHEGasConfig}
+ */
+export const DEFAULT_TFHE_GAS_CONFIG: TFHEGasConfig = {
+  bufferPercentage: parseInt(process.env.NEXT_PUBLIC_TFHE_GAS_BUFFER || '20', 10),
+  maxGasLimit: parseInt(process.env.NEXT_PUBLIC_TFHE_MAX_GAS_LIMIT || '10000000', 10),
+  fallbackGas: parseInt(process.env.NEXT_PUBLIC_TFHE_FALLBACK_GAS || '500000', 10),
+  decryptBufferPercentage: parseInt(process.env.NEXT_PUBLIC_TFHE_DECRYPT_BUFFER || '50', 10),
 };
 
 /** @private Global flag to prevent duplicate SDK initialization */
@@ -84,6 +118,9 @@ export class FHEVMClient {
 
   /** @private Flag indicating whether the client has been initialized */
   private isInitialized = false;
+
+  /** @private Gas configuration for TFHE operations */
+  private gasConfig: TFHEGasConfig = DEFAULT_TFHE_GAS_CONFIG;
 
   /**
    * Creates a new FHEVMClient instance.
@@ -431,9 +468,86 @@ export class FHEVMClient {
   getIsInitialized(): boolean {
     return this.isInitialized;
   }
+
+  /**
+   * Get the current TFHE gas configuration.
+   *
+   * @returns Current gas configuration
+   */
+  getTFHEGasConfig(): TFHEGasConfig {
+    return { ...this.gasConfig };
+  }
+
+  /**
+   * Update TFHE gas configuration.
+   *
+   * @param config - Partial gas configuration to update
+   */
+  setTFHEGasConfig(config: Partial<TFHEGasConfig>): void {
+    this.gasConfig = { ...this.gasConfig, ...config };
+  }
+
+  /**
+   * Estimate gas for TFHE operations with appropriate buffer.
+   *
+   * TFHE operations, especially TFHE.decrypt(), have unpredictable gas costs.
+   * This method applies TFHE-specific buffers to handle this unpredictability.
+   *
+   * @param baseGasEstimate - Base gas estimate from contract
+   * @param operationType - Type of TFHE operation ('encrypt' | 'decrypt' | 'compute')
+   * @returns Gas estimate with TFHE-appropriate buffer applied
+   *
+   * @example
+   * ```typescript
+   * // For normal TFHE operations
+   * const gasLimit = fhevmClient.estimateTFHEGas(baseEstimate, 'encrypt');
+   *
+   * // For decrypt operations (higher buffer)
+   * const gasLimit = fhevmClient.estimateTFHEGas(baseEstimate, 'decrypt');
+   * ```
+   */
+  estimateTFHEGas(
+    baseGasEstimate: bigint,
+    operationType: 'encrypt' | 'decrypt' | 'compute' = 'compute'
+  ): bigint {
+    // Use higher buffer for decrypt operations due to their unpredictability
+    const bufferPercentage = operationType === 'decrypt'
+      ? this.gasConfig.decryptBufferPercentage
+      : this.gasConfig.bufferPercentage;
+
+    // Apply buffer percentage
+    const bufferedGas = (baseGasEstimate * BigInt(100 + bufferPercentage)) / BigInt(100);
+
+    // Ensure we don't exceed maximum gas limit
+    if (bufferedGas > BigInt(this.gasConfig.maxGasLimit)) {
+      console.warn(
+        `TFHE gas estimate ${bufferedGas} exceeds maximum limit ${this.gasConfig.maxGasLimit}, using maximum`
+      );
+      return BigInt(this.gasConfig.maxGasLimit);
+    }
+
+    return bufferedGas;
+  }
+
+  /**
+   * Get fallback gas amount for TFHE operations when estimation fails.
+   *
+   * @param operationType - Type of TFHE operation
+   * @returns Fallback gas amount
+   */
+  getTFHEFallbackGas(operationType: 'encrypt' | 'decrypt' | 'compute' = 'compute'): bigint {
+    // Use higher fallback for decrypt operations
+    const fallbackMultiplier = operationType === 'decrypt' ? 1.5 : 1.0;
+    return BigInt(Math.floor(this.gasConfig.fallbackGas * fallbackMultiplier));
+  }
 }
 
-// Global FHEVM client instance
+/**
+ * Global FHEVM client instance.
+ *
+ * This singleton instance should be used throughout the application to maintain
+ * consistent state and avoid multiple initializations.
+ */
 export const fhevmClient = new FHEVMClient();
 
 // Utility function to format encrypted values for display
@@ -463,4 +577,106 @@ export const validateUint32Input = (value: string): { isValid: boolean; error?: 
   }
 
   return { isValid: true };
+};
+
+/**
+ * Enhanced gas estimation specifically designed for TFHE operations.
+ *
+ * This function wraps the existing gas estimation logic with TFHE-specific
+ * buffers and fallback handling.
+ *
+ * @param contract - The ethers contract instance
+ * @param method - The contract method name
+ * @param args - Arguments to pass to the contract method
+ * @param operationType - Type of TFHE operation for appropriate buffering
+ * @param config - Optional TFHE gas configuration overrides
+ * @returns Promise resolving to gas estimate optimized for TFHE operations
+ *
+ * @example
+ * ```typescript
+ * // For increment operation with TFHE encryption
+ * const gasLimit = await estimateTFHEGas(
+ *   contract,
+ *   'increment',
+ *   [encryptedValue, proof],
+ *   'encrypt'
+ * );
+ *
+ * // For operations that involve TFHE.decrypt
+ * const gasLimit = await estimateTFHEGas(
+ *   contract,
+ *   'getDecryptedCount',
+ *   [],
+ *   'decrypt'
+ * );
+ * ```
+ */
+export const estimateTFHEGas = async (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contract: any,
+  method: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any[],
+  operationType: 'encrypt' | 'decrypt' | 'compute' = 'compute',
+  config?: Partial<TFHEGasConfig>
+): Promise<bigint> => {
+  // Update FHEVM client gas config if provided
+  if (config) {
+    fhevmClient.setTFHEGasConfig(config);
+  }
+
+  try {
+    // Try to get base gas estimate from contract
+    const baseEstimate = await contract[method].estimateGas(...args);
+
+    // Apply TFHE-specific buffering
+    return fhevmClient.estimateTFHEGas(baseEstimate, operationType);
+  } catch (error) {
+    console.warn(`TFHE gas estimation failed for ${method}:`, error);
+
+    // Return fallback gas amount appropriate for operation type
+    return fhevmClient.getTFHEFallbackGas(operationType);
+  }
+};
+
+/**
+ * Validates TFHE gas parameters to ensure they're within safe limits.
+ *
+ * @param gasLimit - Gas limit to validate
+ * @param operationType - Type of TFHE operation
+ * @returns Validation result with adjusted gas if needed
+ */
+export const validateTFHEGas = (
+  gasLimit: bigint,
+  operationType: 'encrypt' | 'decrypt' | 'compute' = 'compute'
+): { isValid: boolean; adjustedGas: bigint; warnings: string[] } => {
+  const warnings: string[] = [];
+  const config = fhevmClient.getTFHEGasConfig();
+  let adjustedGas = gasLimit;
+
+  // Check if gas exceeds maximum limit
+  if (gasLimit > BigInt(config.maxGasLimit)) {
+    warnings.push(`Gas limit ${gasLimit} exceeds TFHE maximum ${config.maxGasLimit}`);
+    adjustedGas = BigInt(config.maxGasLimit);
+  }
+
+  // Check if gas is suspiciously low for TFHE operations
+  const minGasForOperation = {
+    encrypt: BigInt(100000),
+    decrypt: BigInt(200000),
+    compute: BigInt(150000),
+  };
+
+  if (gasLimit < minGasForOperation[operationType]) {
+    warnings.push(
+      `Gas limit ${gasLimit} seems low for TFHE ${operationType} operation. ` +
+      `Consider minimum ${minGasForOperation[operationType]}`
+    );
+  }
+
+  return {
+    isValid: warnings.length === 0,
+    adjustedGas,
+    warnings,
+  };
 };

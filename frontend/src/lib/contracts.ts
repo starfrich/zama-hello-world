@@ -362,8 +362,7 @@ export class FHECounterContract {
    *
    * @throws {Error} When contract is not initialized
    *
-   * @example
-   * ```typescript\n   * const result = await contract.decrement(3, '0x1234...');\n   * if (result.success) {\n   *   console.log('Decrement successful, tx:', result.transactionHash);\n   * } else {\n   *   console.error('Decrement failed:', result.error);\n   * }\n   * ```\n   */
+   * */
   async decrement(value: number, userAddress: string): Promise<CounterOperationResult> {
     if (!this.contract) {
       throw new Error('Contract not initialized. Call initialize() first with a valid signer.');
@@ -588,7 +587,13 @@ export class FHECounterContract {
         abortSignal
       );
 
-      // Validate decrypted result
+      // Handle null result (user cancellation or permission denied)
+      if (result === null) {
+        // Don't log as error - this is expected for cancellation or no permission
+        return null;
+      }
+
+      // Validate decrypted result (only for non-null values)
       if (typeof result !== 'number' || result < 0 || !Number.isInteger(result)) {
         console.error('Invalid decryption result:', result);
         return null;
