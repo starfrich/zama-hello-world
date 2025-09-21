@@ -26,7 +26,7 @@ export function Providers({ children }: ProvidersProps) {
             overlayBlur: 'small',
           })}
         >
-          <React.Fragment key="children">{children}</React.Fragment>
+          {children}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

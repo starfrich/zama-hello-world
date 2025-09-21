@@ -1,18 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';  // UPDATED: Import toast buat hint
 import { useFHEVM } from '@/hooks/useFHEVM';
 import { validateUint32Input, formatEncryptedValue } from '@/lib/fhevm';
-import { Loader2, Lock, Unlock, Plus, Minus, RefreshCw, Eye } from 'lucide-react';
+import { Loader2, Lock, Unlock, Plus, Minus, RefreshCw, Eye, RotateCcw } from 'lucide-react';
 
 interface CounterProps {
   contractAddress?: string;
@@ -31,6 +30,7 @@ export function Counter({ contractAddress }: CounterProps) {
     canDecrypt,
     incrementCounter,
     decrementCounter,
+    resetCounter,
     refreshCount,
     decryptCount,
     error,
@@ -74,6 +74,68 @@ export function Counter({ contractAddress }: CounterProps) {
     }
     await decryptCount();
   };
+
+  const handleReset = async () => {
+    await resetCounter();
+    setInputValue('');
+    setInputError(null);
+  };
+
+  // Event listener for contract events
+  useEffect(() => {
+    if (!isInitialized || !contractAddress) return;
+
+    const setupEventListener = async () => {
+      try {
+        // Setup event listener for CountUpdated events
+        const provider = new (await import('ethers')).ethers.BrowserProvider(window.ethereum);
+        const contract = new (await import('ethers')).ethers.Contract(
+          contractAddress,
+          [
+            {
+              "anonymous": false,
+              "inputs": [
+                {
+                  "indexed": true,
+                  "internalType": "address",
+                  "name": "user",
+                  "type": "address"
+                },
+                {
+                  "indexed": false,
+                  "internalType": "string",
+                  "name": "operation",
+                  "type": "string"
+                }
+              ],
+              "name": "CountUpdated",
+              "type": "event"
+            }
+          ],
+          provider
+        );
+
+        const eventFilter = contract.filters.CountUpdated();
+
+        const handleCountUpdated = (user: string, operation: string) => {
+          console.log(`Count updated by ${user}: ${operation}`);
+          // Refresh count when we receive an event
+          setTimeout(() => refreshCount(), 2000); // Small delay to ensure blockchain state is updated
+        };
+
+        contract.on(eventFilter, handleCountUpdated);
+
+        // Cleanup function
+        return () => {
+          contract.off(eventFilter, handleCountUpdated);
+        };
+      } catch (error) {
+        console.warn('Failed to setup event listeners:', error);
+      }
+    };
+
+    setupEventListener();
+  }, [isInitialized, contractAddress, refreshCount]);
 
   if (!isConnected) {
     return (
@@ -182,10 +244,10 @@ export function Counter({ contractAddress }: CounterProps) {
                       size="sm"
                       variant="outline"
                       onClick={handleDecrypt}
-                      disabled={isLoading || decryptedCount !== null}
+                      disabled={isLoading}
                     >
                       <Eye className="w-4 h-4 mr-1" />
-                      {decryptedCount !== null ? 'Refreshed' : 'Decrypt'}
+                      {decryptedCount !== null ? 'Re-decrypt' : 'Decrypt'}
                     </Button>
                   )}
                 </div>
@@ -216,7 +278,9 @@ export function Counter({ contractAddress }: CounterProps) {
             <Input
               id="increment-value"
               type="number"
-              placeholder="Enter a number (1-4294967295)"
+              min={0}
+              max={4294967295}
+              placeholder="Enter a number (0-4294967295)"
               value={inputValue}
               onChange={(e) => handleInputChange(e.target.value)}
               disabled={isLoading || !isInitialized}
@@ -255,18 +319,24 @@ export function Counter({ contractAddress }: CounterProps) {
               Decrement
             </Button>
           </div>
-        </div>
 
-        {/* Loading Progress */}
-        {isLoading && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span>Processing...</span>
-              <span>Please wait</span>
-            </div>
-            <Progress value={undefined} className="h-2" aria-label="Processing transaction" />  {/* UPDATED: Tambah aria-label */}
+          {/* Reset Button */}
+          <div className="flex justify-center">
+            <Button
+              variant="secondary"
+              onClick={handleReset}
+              disabled={isLoading || !isInitialized}
+              className="flex items-center gap-2"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
+              Reset Counter to Zero
+            </Button>
           </div>
-        )}
+        </div>
 
         {/* Info Section */}
         <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">

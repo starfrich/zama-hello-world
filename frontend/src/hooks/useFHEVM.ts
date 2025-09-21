@@ -14,6 +14,7 @@ interface UseFHEVMReturn {
   canDecrypt: boolean;
   incrementCounter: (value: number) => Promise<CounterOperationResult>;
   decrementCounter: (value: number) => Promise<CounterOperationResult>;
+  resetCounter: () => Promise<CounterOperationResult>;
   refreshCount: () => Promise<void>;
   decryptCount: () => Promise<void>;
   error: string | null;
@@ -30,8 +31,6 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const [decryptedCount, setDecryptedCount] = useState<number | null>(null);
   const [canDecrypt, setCanDecrypt] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const [permissionHint, setPermissionHint] = useState<string | null>(null);
 
   // Initialize FHEVM client and contract
   const initialize = useCallback(async () => {
@@ -89,17 +88,21 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const decryptCount = useCallback(async () => {
     if (!contract || !address) return;
 
+    const decryptToastId = `decrypt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     try {
       setIsLoading(true);
-      toast.loading('Requesting decryption... Preparing signature');  // UPDATED: Granular toast
+      toast.loading('Requesting decryption... Preparing signature', { id: decryptToastId });
 
       const decrypted = await contract.decryptCount(address);
       setDecryptedCount(decrypted);
-      toast.success('Count decrypted successfully');
+      toast.success('Count decrypted successfully', { id: decryptToastId });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to decrypt count';
       setError(errorMessage);
-      toast.error(errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage);
+      const finalError = errorMessage.includes('not authorized') ? 'Grant permission first!' : errorMessage;
+
+      toast.error(finalError, { id: decryptToastId });
     } finally {
       setIsLoading(false);
     }
@@ -113,11 +116,11 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return { success: false, error };
     }
 
-    let txToastId: string = '';
+    const txToastId = `increment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
       setIsLoading(true);
-      txToastId = String(toast.loading('Encrypting and sending transaction...'));
+      toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
       const result = await contract.increment(value, address);
 
@@ -131,11 +134,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to increment counter';
-      if (txToastId) {
-        toast.error(errorMessage, { id: txToastId });
-      } else {
-        toast.error(errorMessage);
-      }
+      toast.error(errorMessage, { id: txToastId });
       return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
@@ -150,11 +149,11 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return { success: false, error };
     }
 
-    let txToastId: string = '';
+    const txToastId = `decrement-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
       setIsLoading(true);
-      txToastId = String(toast.loading('Encrypting and sending transaction...'));
+      toast.loading('Encrypting and sending transaction...', { id: txToastId });
 
       const result = await contract.decrement(value, address);
 
@@ -169,11 +168,40 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
       return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to decrement counter';
-      if (txToastId) {
-        toast.error(errorMessage, { id: txToastId });
+      toast.error(errorMessage, { id: txToastId });
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contract, address, refreshCount]);
+
+  // Reset counter
+  const resetCounter = useCallback(async (): Promise<CounterOperationResult> => {
+    if (!contract || !address) {
+      const error = 'Contract not initialized or wallet not connected';
+      toast.error(error);
+      return { success: false, error };
+    }
+
+    const txToastId = `reset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      setIsLoading(true);
+      toast.loading('Resetting counter...', { id: txToastId });
+
+      const result = await contract.reset();
+
+      if (result.success) {
+        toast.success('Counter reset to zero successfully', { id: txToastId });
+        await refreshCount();
       } else {
-        toast.error(errorMessage);
+        toast.error(result.error || 'Reset failed', { id: txToastId });
       }
+
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to reset counter';
+      toast.error(errorMessage, { id: txToastId });
       return { success: false, error: errorMessage };
     } finally {
       setIsLoading(false);
@@ -203,6 +231,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     canDecrypt,
     incrementCounter,
     decrementCounter,
+    resetCounter,
     refreshCount,
     decryptCount,
     error,

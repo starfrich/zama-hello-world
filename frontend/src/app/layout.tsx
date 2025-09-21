@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { ClientWrapper } from "@/components/client-wrapper";
-import { Toaster } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,16 +33,7 @@ export default function RootLayout({
         <ClientWrapper>
           {children}
         </ClientWrapper>
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: 'hsl(var(--background))',
-                color: 'hsl(var(--foreground))',
-                border: '1px solid hsl(var(--border))',
-              },
-            }}
-          />
+          <Toaster position="top-right" />
       </body>
     </html>
   );

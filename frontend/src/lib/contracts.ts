@@ -59,6 +59,32 @@ export const FHE_COUNTER_ABI = [
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
     "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reset",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "string",
+        "name": "operation",
+        "type": "string"
+      }
+    ],
+    "name": "CountUpdated",
+    "type": "event"
   }
 ];
 
@@ -178,6 +204,34 @@ export class FHECounterContract {
       };
     } catch (error) {
       console.error('Error decrementing counter:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Reset the counter to encrypted zero
+   */
+  async reset(): Promise<CounterOperationResult> {
+    if (!this.contract) {
+      throw new Error('Contract not initialized');
+    }
+
+    try {
+      // Call the reset function (no parameters needed)
+      const tx = await this.contract.reset();
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+      };
+    } catch (error) {
+      console.error('Error resetting counter:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
