@@ -122,6 +122,7 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
   const isInitializedRef = useRef(false);
   const contractRef = useRef<ReturnType<typeof createFHECounterContract> | null>(null);
   const lastChainIdRef = useRef<number | undefined>(chainId);
+  const lastAddressRef = useRef<string | undefined>(address);
 
   /**
    * Utility function to generate unique toast IDs for operations.
@@ -755,6 +756,29 @@ export const useFHEVM = (contractAddress?: string): UseFHEVMReturn => {
     }
     lastChainIdRef.current = chainId;
   }, [chainId, isConnected, cancelAllOperations]);
+
+  // Handle wallet/address changes
+  useEffect(() => {
+    if (lastAddressRef.current !== undefined && lastAddressRef.current !== address && isConnected && address) {
+      // Wallet switched - clear cache and reinitialize
+      console.info(`Wallet switched from ${lastAddressRef.current} to ${address}`);
+
+      // Clear FHEVM client cache (important for keypair isolation)
+      fhevmClient.clearKeypairCache();
+
+      // Reset all state
+      cancelAllOperations();
+      setIsInitialized(false);
+      setContract(null);
+      setEncryptedCount(null);
+      setDecryptedCount(null);
+      setCanDecrypt(false);
+      setError(null);
+
+      toast.info('Wallet switched. Reinitializing...');
+    }
+    lastAddressRef.current = address;
+  }, [address, isConnected, cancelAllOperations]);
 
   // Cleanup all operations on unmount
   useEffect(() => {

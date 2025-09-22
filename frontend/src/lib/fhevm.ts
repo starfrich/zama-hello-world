@@ -26,6 +26,29 @@ export interface FHEVMConfig {
   chainId: number;
   /** Gateway chain ID for FHEVM operations */
   gatewayChainId: number;
+  /** FHEVM system contract addresses */
+  contracts?: {
+    executor?: string;
+    acl?: string;
+    hcuLimit?: string;
+    kmsVerifier?: string;
+    inputVerifier?: string;
+    decryptionOracle?: string;
+  };
+}
+
+/**
+ * Configuration validation result interface.
+ *
+ * @interface ConfigValidation
+ */
+export interface ConfigValidation {
+  /** Whether the configuration is valid */
+  isValid: boolean;
+  /** Array of validation warnings */
+  warnings: string[];
+  /** Array of validation errors */
+  errors: string[];
 }
 
 /**
@@ -65,19 +88,118 @@ export interface TFHEGasConfig {
 }
 
 /**
- * Default FHEVM configuration for Sepolia testnet.
+ * Validates FHEVM configuration for basic correctness.
  *
- * This configuration is used for development and testing. Production deployments
- * should use environment variables to override these defaults.
+ * This function performs essential validation of configuration values
+ * to ensure the FHEVM client can function properly.
+ *
+ * @param config - Configuration to validate
+ * @returns Validation result with errors and warnings
+ */
+export const validateFHEVMConfig = (config: FHEVMConfig): ConfigValidation => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Required configuration validation
+  if (!config.network) {
+    errors.push('Network RPC URL is required');
+  }
+  if (!config.relayerUrl) {
+    errors.push('Relayer URL is required');
+  }
+  if (!config.chainId || config.chainId <= 0) {
+    errors.push('Valid chain ID is required');
+  }
+  if (!config.gatewayChainId || config.gatewayChainId <= 0) {
+    errors.push('Valid gateway chain ID is required');
+  }
+
+  // URL format validation
+  try {
+    new URL(config.network);
+  } catch {
+    errors.push('Network URL is not a valid URL');
+  }
+
+  try {
+    new URL(config.relayerUrl);
+  } catch {
+    errors.push('Relayer URL is not a valid URL');
+  }
+
+  // Basic security warnings
+  if (config.network.includes('localhost') || config.network.includes('127.0.0.1')) {
+    warnings.push('Using localhost RPC - ensure this is intended for development');
+  }
+
+  // Contract address validation (if provided)
+  if (config.contracts) {
+    const addressPattern = /^0x[a-fA-F0-9]{40}$/;
+    Object.entries(config.contracts).forEach(([name, address]) => {
+      if (address && !addressPattern.test(address)) {
+        errors.push(`Invalid ${name} contract address: ${address}`);
+      }
+    });
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+};
+
+/**
+ * Creates FHEVM configuration from environment variables with validation.
+ *
+ * This function builds a complete FHEVM configuration from environment variables
+ * and provides sensible defaults for missing values.
+ *
+ * @returns Validated FHEVM configuration
+ * @throws {Error} When critical configuration is missing or invalid
+ */
+export const createFHEVMConfig = (): FHEVMConfig => {
+  // Build configuration from environment variables
+  const config: FHEVMConfig = {
+    network: process.env.NEXT_PUBLIC_RPC_URL || 'https://eth-sepolia.public.blastapi.io',
+    relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL || 'https://relayer.testnet.zama.cloud',
+    chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '11155111', 10),
+    gatewayChainId: parseInt(process.env.NEXT_PUBLIC_GATEWAY_CHAIN_ID || '55815', 10),
+    contracts: {
+      executor: process.env.NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT,
+      acl: process.env.NEXT_PUBLIC_ACL_CONTRACT,
+      hcuLimit: process.env.NEXT_PUBLIC_HCU_LIMIT_CONTRACT,
+      kmsVerifier: process.env.NEXT_PUBLIC_KMS_VERIFIER_CONTRACT,
+      inputVerifier: process.env.NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT,
+      decryptionOracle: process.env.NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT,
+    }
+  };
+
+  // Validate configuration
+  const validation = validateFHEVMConfig(config);
+
+  // Log warnings
+  if (validation.warnings.length > 0) {
+    console.warn('FHEVM Configuration Warnings:', validation.warnings);
+  }
+
+  // Throw errors for critical issues
+  if (!validation.isValid) {
+    console.error('FHEVM Configuration Errors:', validation.errors);
+    throw new Error(`FHEVM configuration validation failed: ${validation.errors.join(', ')}`);
+  }
+
+  return config;
+};
+
+/**
+ * Default FHEVM configuration with validation.
+ *
+ * This configuration is created from environment variables with sensible defaults.
  *
  * @constant {FHEVMConfig}
  */
-export const FHEVM_CONFIG: FHEVMConfig = {
-  network: process.env.NEXT_PUBLIC_RPC_URL || 'https://eth-sepolia.public.blastapi.io',
-  relayerUrl: process.env.NEXT_PUBLIC_RELAYER_URL || 'https://relayer.testnet.zama.cloud',
-  chainId: 11155111, // Sepolia testnet
-  gatewayChainId: 55815, // Gateway chain
-};
+export const FHEVM_CONFIG: FHEVMConfig = createFHEVMConfig();
 
 /**
  * Default gas configuration for TFHE operations.
@@ -145,6 +267,7 @@ export class FHEVMClient {
   /** @private Keypair cache expiration time in milliseconds (default: 1 hour) */
   private readonly KEYPAIR_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
+
   /**
    * Creates a new FHEVMClient instance.
    *
@@ -205,13 +328,14 @@ export class FHEVMClient {
         sdkInitialized = true;
       }
 
-      // Create instance with Sepolia config, use window.ethereum for network
+      // Use simple SepoliaConfig with window.ethereum for web environment
       const config = {
         ...SepoliaConfig,
         network: window.ethereum, // Use window.ethereum for web environment
       };
 
       this.instance = await createInstance(config);
+
       this.isInitialized = true;
 
       return this;
@@ -220,6 +344,7 @@ export class FHEVMClient {
       throw new Error('Failed to initialize FHEVM client');
     }
   }
+
 
   /**
    * Encrypts a 32-bit unsigned integer for confidential smart contract operations.
@@ -459,9 +584,9 @@ export class FHEVMClient {
         throw new Error('Operation cancelled');
       }
 
-      // Perform user decryption with cancellation support
-      // Note: Some FHEVM versions expect signature with 0x prefix, others without
-      let formattedSignature = signature;
+      // Perform user decryption with simple signature handling
+      // Try without 0x prefix first (most common format)
+      let formattedSignature = signature.replace(/^0x/, '');
 
       // Helper function to create cancellable userDecrypt
       const createCancellableDecrypt = (sig: string) => {
@@ -491,7 +616,7 @@ export class FHEVMClient {
         ]);
       };
 
-      // Try with 0x prefix first, if it fails we'll retry without
+      // Try without 0x prefix first, fallback to with prefix if needed
       try {
         const result = await createCancellableDecrypt(formattedSignature);
         const decryptedValue = result[handle];
@@ -502,9 +627,9 @@ export class FHEVMClient {
           throw new Error('Operation cancelled');
         }
 
-        // If 0x prefix fails, try without it
-        if (error instanceof Error && error.message.includes('0x is not of valid length')) {
-          formattedSignature = signature.replace('0x', '');
+        // If signature format fails, try with 0x prefix
+        if (error instanceof Error && error.message.includes('length')) {
+          formattedSignature = signature.startsWith('0x') ? signature : `0x${signature}`;
           const result = await createCancellableDecrypt(formattedSignature);
           const decryptedValue = result[handle];
           return parseInt(decryptedValue, 10);
