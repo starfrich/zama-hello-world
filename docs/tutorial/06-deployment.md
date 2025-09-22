@@ -733,8 +733,7 @@ Congratulations! You've successfully deployed your FHEVM application. Your confi
 
 ## 📚 Additional Resources
 
-- [Vercel Deployment Docs](https://vercel.com/docs/concepts/deployments)
-- [Hardhat Deployment Guide](https://hardhat.org/tutorial/deploying-to-a-live-network)
-- [Etherscan Verification](https://docs.etherscan.io/tutorials/verifying-contracts-programmatically)
+- [Vercel Deployment Docs](https://vercel.com/docs/deployments)
+- [Hardhat Deployment Guide](https://v2.hardhat.org/tutorial/deploying-to-a-live-network)
+- [Etherscan Verification](https://docs.etherscan.io/contract-verification/verify-with-hardhat)
 - [GitHub Actions for Web3](https://github.com/actions/starter-workflows)
-- [FHEVM Production Guide](https://docs.zama.ai/fhevm/guides/deploy)

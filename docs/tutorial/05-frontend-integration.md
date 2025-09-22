@@ -930,7 +930,7 @@ You've now built a complete frontend for your FHEVM application! The final step 
 
 ## 📚 Additional Resources
 
-- [FHEVM.js Documentation](https://docs.zama.ai/fhevm/getting_started/browser)
+- [FHEVM Documentation](https://docs.zama.ai/protocol)
 - [RainbowKit Documentation](https://rainbowkit.com)
 - [Wagmi Documentation](https://wagmi.sh)
 - [Next.js App Router Guide](https://nextjs.org/docs/app)

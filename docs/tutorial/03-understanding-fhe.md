@@ -500,7 +500,6 @@ With a solid understanding of FHE fundamentals, you're ready to implement these 
 
 ## 📚 Further Reading
 
-- [TFHE Library Specification](https://docs.zama.ai/tfhe)
 - [Homomorphic Encryption Standardization](https://homomorphicencryption.org/)
 - [Learning With Errors Problem](https://en.wikipedia.org/wiki/Learning_with_errors)
 - [Bootstrapping in FHE](https://eprint.iacr.org/2011/277.pdf)

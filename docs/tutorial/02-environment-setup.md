@@ -359,5 +359,5 @@ If you encounter issues:
 
 1. **Check the [Troubleshooting Guide](../reference/troubleshooting.md)**
 2. **Visit [Zama Discord](https://discord.gg/zama)** for community support
-3. **Review [FHEVM Documentation](https://docs.zama.ai/fhevm)** for technical details
+3. **Review [FHEVM Documentation](https://docs.zama.ai/protocol)** for technical details
 4. **Open an issue** in the project repository

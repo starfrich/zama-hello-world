@@ -446,7 +446,5 @@ Now that you understand FHEVM smart contract development, you're ready to build 
 
 ## 📚 Additional Resources
 
-- [FHEVM Solidity Library Reference](https://docs.zama.ai/fhevm/fundamentals/types)
-- [Advanced FHE Operations](https://docs.zama.ai/fhevm/fundamentals/operations)
-- [Gas Optimization Guide](https://docs.zama.ai/fhevm/guides/gas-estimation)
-- [Security Best Practices](https://docs.zama.ai/fhevm/guides/security)
+- [FHEVM Solidity Library Reference](https://docs.zama.ai/protocol/solidity-guides)
+- [Advanced FHE Operations](https://docs.zama.ai/protocol/examples/basic/fhe-operations)
