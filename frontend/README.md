@@ -134,7 +134,7 @@ Ensure environment variables are properly configured in your deployment platform
 
 ## Learn More
 
-- [FHEVM Documentation](https://docs.zama.ai/fhevm)
+- [FHEVM Documentation](https://docs.zama.ai/protocol)
 - [Zama GitHub](https://github.com/zama-ai/fhevm)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [shadcn/ui Components](https://ui.shadcn.com)

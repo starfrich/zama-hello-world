@@ -65,7 +65,7 @@ export default function Home() {
         <div className="max-w-2xl mx-auto mt-12 text-center">
           <div className="flex flex-wrap justify-center gap-4">
             <a
-              href="https://docs.zama.ai/fhevm"
+              href="https://docs.zama.ai/protocol"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"

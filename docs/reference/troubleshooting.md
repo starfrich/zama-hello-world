@@ -470,7 +470,7 @@ If you're still experiencing issues:
 2. **Review the Logs**: Check both browser and server logs
 3. **Test Incrementally**: Isolate the problem to specific components
 4. **Community Support**: Join the [Zama Discord](https://discord.gg/zama)
-5. **Documentation**: Reference [FHEVM Docs](https://docs.zama.ai/fhevm)
+5. **Documentation**: Reference [FHEVM Docs](https://docs.zama.ai/protocol)
 
 ## 📝 Reporting Issues
 

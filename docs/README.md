@@ -50,7 +50,7 @@ By the end of this tutorial series, you'll be able to:
 
 ## 🔗 External Resources
 
-- [Zama FHEVM Documentation](https://docs.zama.ai/fhevm)
+- [Zama FHEVM Documentation](https://docs.zama.ai/protocol)
 - [FHEVM GitHub Repository](https://github.com/zama-ai/fhevm)
 - [Zama Community Discord](https://discord.gg/zama)
 

@@ -199,5 +199,5 @@ As a developer learning FHEVM, you're positioning yourself at the forefront of t
 
 ## 🔗 Additional Resources
 
-- [FHEVM Documentation](https://docs.zama.ai/fhevm)
+- [FHEVM Documentation](https://docs.zama.ai/protocol)
 - [FHEVM Examples Repository](https://github.com/zama-ai/fhevm)

@@ -90,7 +90,7 @@ fhevm-hardhat-template/
 
 ## 📚 Documentation
 
-- [FHEVM Documentation](https://docs.zama.ai/fhevm)
+- [FHEVM Documentation](https://docs.zama.ai/protocol)
 - [FHEVM Hardhat Setup Guide](https://docs.zama.ai/protocol/solidity-guides/getting-started/setup)
 - [FHEVM Testing Guide](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat/write_test)
 - [FHEVM Hardhat Plugin](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat)
