@@ -20,7 +20,7 @@ This comprehensive guide covers deploying your FHEVM application to various envi
                                │
                                ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Development   │───▶│     Staging     │───▶│   Production    │
+│   Development   │──▶│     Staging     │───▶│   Production    │
 │   (Local)       │    │   (Sepolia)     │    │   (Mainnet)     │
 │                 │    │                 │    │                 │
 │ • Local Hardhat │    │ • Sepolia       │    │ • Ethereum      │
@@ -713,11 +713,11 @@ Congratulations! You've successfully deployed your FHEVM application. Your confi
 
 ### **What You've Accomplished**
 
-✅ **Local Development Environment** - Complete setup for development and testing
-✅ **Sepolia Testnet Deployment** - Real-world testing environment
-✅ **Production-Ready Architecture** - Scalable, secure, and monitored
-✅ **CI/CD Pipeline** - Automated deployment and testing
-✅ **Monitoring and Analytics** - Comprehensive observability
+- ✅ **Local Development Environment** - Complete setup for development and testing
+- ✅ **Sepolia Testnet Deployment** - Real-world testing environment
+- ✅ **Production-Ready Architecture** - Scalable, secure, and monitored
+- ✅ **CI/CD Pipeline** - Automated deployment and testing
+- ✅ **Monitoring and Analytics** - Comprehensive observability
 
 ### **Next Steps for Your FHEVM Journey**
 

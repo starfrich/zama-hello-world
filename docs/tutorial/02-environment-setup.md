@@ -315,23 +315,6 @@ Before proceeding to the next tutorial, ensure you have:
 - [ ] Frontend starts without errors
 - [ ] VS Code extensions installed (optional)
 
-## 🎯 Next Steps
-
-With your environment set up, you're ready to dive deeper into FHEVM concepts. In the next section, we'll explore the cryptographic foundations and learn how Fully Homomorphic Encryption works.
-
----
-
-**Environment ready?** Continue to [Understanding FHE](03-understanding-fhe.md) →
-
-## 🆘 Need Help?
-
-If you encounter issues:
-
-1. **Check the [Troubleshooting Guide](../reference/troubleshooting.md)**
-2. **Visit [Zama Discord](https://discord.gg/zama)** for community support
-3. **Review [FHEVM Documentation](https://docs.zama.ai/fhevm)** for technical details
-4. **Open an issue** in the project repository
-
 ## 🔗 Useful Commands Reference
 
 ### Contracts Commands
@@ -361,3 +344,20 @@ npx hardhat test                   # Run tests
 npx hardhat deploy --network sepolia # Deploy to Sepolia
 npx hardhat verify --network sepolia <address> # Verify contract
 ```
+
+## 🎯 Next Steps
+
+With your environment set up, you're ready to dive deeper into FHEVM concepts. In the next section, we'll explore the cryptographic foundations and learn how Fully Homomorphic Encryption works.
+
+---
+
+**Environment ready?** Continue to [Understanding FHE](03-understanding-fhe.md) →
+
+## 🆘 Need Help?
+
+If you encounter issues:
+
+1. **Check the [Troubleshooting Guide](../reference/troubleshooting.md)**
+2. **Visit [Zama Discord](https://discord.gg/zama)** for community support
+3. **Review [FHEVM Documentation](https://docs.zama.ai/fhevm)** for technical details
+4. **Open an issue** in the project repository
