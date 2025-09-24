@@ -75,14 +75,22 @@ contract PublicCounter {
 
 ### Confidential Counter (FHEVM)
 ```solidity
-import "fhevm/lib/TFHE.sol";
+import {FHE, euint32, externalEuint32} from "@fhevm/solidity/lib/FHE.sol";
+import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
-contract ConfidentialCounter {
+contract ConfidentialCounter is SepoliaConfig {
     euint32 private counter; // ✅ Value encrypted
 
-    function increment(einput amount) public {
-        euint32 encryptedAmount = TFHE.asEuint32(amount);
-        counter = TFHE.add(counter, encryptedAmount); // ✅ Encrypted computation
+    constructor() {
+        counter = FHE.asEuint32(0);  // Initialize to encrypted zero
+        FHE.allowThis(counter);      // Allow contract access
+    }
+
+    function increment(externalEuint32 inputAmount, bytes calldata inputProof) external {
+        euint32 encryptedAmount = FHE.fromExternal(inputAmount, inputProof);  // Convert external input
+        counter = FHE.add(counter, encryptedAmount); // ✅ Encrypted computation
+        FHE.allowThis(counter);                      // Update ACL for contract
+        FHE.allow(counter, msg.sender);              // Allow user to decrypt
     }
 }
 ```
@@ -91,32 +99,49 @@ contract ConfidentialCounter {
 
 ### 1. **Encrypted Types**
 FHEVM introduces encrypted data types:
-- `euint8`, `euint16`, `euint32`, `euint64` - Encrypted unsigned integers
+- `euint4`, `euint8`, `euint16`, `euint32`, `euint64`, `euint128`, `euint256` - Encrypted unsigned integers
 - `ebool` - Encrypted boolean
 - `eaddress` - Encrypted address
+- External input types: `externalEuint32`, `externalEbool`, `externalEaddress` for encrypted inputs from outside the contract
 
-### 2. **TFHE Library**
-The TFHE (Threshold Fully Homomorphic Encryption) library provides:
-- Arithmetic operations: `add()`, `sub()`, `mul()`
-- Comparison operations: `lt()`, `gt()`, `eq()`
-- Control flow: `select()` for conditional operations
+### 2. **FHE Library**
+The FHE library provides comprehensive operations:
+- **Arithmetic**: `FHE.add()`, `FHE.sub()`, `FHE.mul()`, `FHE.div()`, `FHE.rem()`, `FHE.min()`, `FHE.max()`, `FHE.neg()`
+- **Bitwise**: `FHE.and()`, `FHE.or()`, `FHE.xor()`, `FHE.not()`, `FHE.shl()`, `FHE.shr()`, `FHE.rotl()`, `FHE.rotr()`
+- **Comparison**: `FHE.lt()`, `FHE.gt()`, `FHE.eq()`, `FHE.ne()`, `FHE.le()`, `FHE.ge()`
+- **Control flow**: `FHE.select()` for conditional operations
+- **Random generation**: `FHE.randEuintX()` for on-chain secure randomness
 
 ### 3. **Client-Side Encryption**
 Data is encrypted on the client before being sent to the blockchain:
 ```typescript
-// Frontend encryption
+// Frontend encryption using fhevmjs
 const encryptedValue = await fhevmInstance.encrypt32(42);
-// Send to contract
-await contract.updateValue(encryptedValue);
+const { input, proof } = encryptedValue;
+// Send encrypted input with proof to contract
+await contract.increment(input, proof);
 ```
 
-### 4. **Selective Decryption**
-Only authorized parties can decrypt specific data:
+### 4. **Access Control & Decryption**
+Only authorized parties can decrypt specific data through the Access Control List (ACL):
 ```solidity
-// Only owner can decrypt the counter value
-function getCounter() public view onlyOwner returns (uint32) {
-    return TFHE.decrypt(counter);
+// Contract function returns encrypted value if user is allowed
+function getCounter() external view returns (euint32) {
+    return counter; // ACL automatically enforces access permissions
 }
+
+// Check if user can decrypt
+function canUserDecrypt() external view returns (bool) {
+    return FHE.isSenderAllowed(counter);
+}
+```
+
+Client-side decryption (using fhevmjs):
+```typescript
+// Get encrypted result from contract
+const encryptedResult = await contract.getCounter();
+// Decrypt if user has permission
+const decryptedValue = await fhevmInstance.decrypt(encryptedResult);
 ```
 
 ## 🌟 Real-World Use Cases
@@ -199,5 +224,7 @@ As a developer learning FHEVM, you're positioning yourself at the forefront of t
 
 ## 🔗 Additional Resources
 
-- [FHEVM Documentation](https://docs.zama.ai/protocol)
-- [FHEVM Examples Repository](https://github.com/zama-ai/fhevm)
+- [Zama Protocol Documentation](https://docs.zama.ai/protocol) - Official FHEVM documentation
+- [FHEVM GitHub Repository](https://github.com/zama-ai/fhevm) - Full-stack framework source code
+- [FHEVM Solidity Library](https://github.com/zama-ai/fhevm-solidity) - Solidity integration library
+- [Zama Community](https://community.zama.ai/) - Developer community and support

@@ -159,14 +159,23 @@ export default {
 
 **Solutions:**
 
-**🔧 Solution 1: Install Dependencies**
+**🔧 Solution 1: Use Correct Import Path**
+```typescript
+// Correct import for web environment
+import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/web';
+
+// NOT this:
+// import { createInstance } from '@zama-fhe/relayer-sdk';
+```
+
+**🔧 Solution 2: Install Dependencies**
 ```bash
 cd frontend
 npm install @zama-fhe/relayer-sdk
 npm run build
 ```
 
-**🔧 Solution 2: Check Package Version**
+**🔧 Solution 3: Check Package Version**
 ```json
 {
   "dependencies": {
@@ -282,7 +291,8 @@ const handleTransaction = async () => {
 
 **🔧 Solution 1: Value Range Validation**
 ```typescript
-const encrypt32 = async (value: number) => {
+// Use actual API methods
+const encryptValue = async (value: number, userAddress: string, contractAddress: string) => {
   if (value < 0 || value > 4294967295) {
     throw new Error('Value must be a valid 32-bit unsigned integer');
   }
@@ -291,23 +301,36 @@ const encrypt32 = async (value: number) => {
     throw new Error('Value must be an integer');
   }
 
-  return await fhevmInstance.encrypt32(value);
+  return await fhevmClient.encryptUint32(value, userAddress, contractAddress);
 };
 ```
 
 **🔧 Solution 2: Check Instance State**
 ```typescript
-const encrypt32 = async (value: number) => {
-  if (!fhevmInstance) {
-    throw new Error('FHEVM instance not initialized');
+const encryptValue = async (value: number, userAddress: string, contractAddress: string) => {
+  if (!fhevmClient.isInitialized) {
+    throw new Error('FHEVM client not initialized');
   }
 
-  // Verify instance is ready
-  if (!fhevmInstance.hasKeysConfigured?.()) {
-    throw new Error('FHEVM keys not configured');
+  if (!userAddress || !contractAddress) {
+    throw new Error('User address and contract address are required');
   }
 
-  return await fhevmInstance.encrypt32(value);
+  return await fhevmClient.encryptUint32(value, userAddress, contractAddress);
+};
+```
+
+**🔧 Solution 3: Use Validation Helper**
+```typescript
+import { validateUint32Input } from '@/lib/fhevm';
+
+const handleEncryption = async (inputValue: string) => {
+  const validation = validateUint32Input(inputValue);
+  if (!validation.isValid) {
+    throw new Error(validation.error || 'Invalid input');
+  }
+
+  return await encryptValue(Number(inputValue), userAddress, contractAddress);
 };
 ```
 

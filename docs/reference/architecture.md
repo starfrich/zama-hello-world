@@ -54,63 +54,111 @@ This document provides a comprehensive overview of the Hello FHEVM project archi
 ```
 frontend/
 ├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── layout.tsx         # Root layout with providers
-│   │   ├── page.tsx           # Main application page
-│   │   └── globals.css        # Global styles
+│   ├── app/
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   │
 │   ├── components/
-│   │   ├── fhevm/             # FHEVM-specific components
-│   │   │   ├── Counter.tsx    # Main counter interface
-│   │   │   └── EncryptionStatus.tsx
-│   │   ├── ui/                # Reusable UI components
-│   │   │   ├── button.tsx
-│   │   │   ├── card.tsx
-│   │   │   └── input.tsx
-│   │   └── providers.tsx      # Context providers
+│   │   ├── fhevm/
+│   │   │   └── Counter.tsx
+│   │   └── ui/
+│   │       ├── badge.tsx
+│   │       ├── button.tsx
+│   │       ├── card.tsx
+│   │       ├── dialog.tsx
+│   │       ├── input.tsx
+│   │       ├── label.tsx
+│   │       ├── progress.tsx
+│   │       ├── sonner.tsx
+│   │       ├── textarea.tsx
+│   │       ├── client-wrapper.tsx
+│   │       └── providers.tsx
+│   │
 │   ├── hooks/
-│   │   ├── useFHEVM.ts       # FHEVM operations
-│   │   ├── useContract.ts    # Contract interactions
-│   │   └── useWallet.ts      # Wallet management
-│   ├── lib/
-│   │   ├── fhevm.ts          # FHEVM client setup
-│   │   ├── contracts.ts      # Contract configurations
-│   │   └── utils.ts          # Utility functions
-│   └── types/
-│       ├── fhevm.ts          # FHEVM type definitions
-│       └── contracts.ts      # Contract types
+│   │   └── useFHEVM.ts
+│   │
+│   └── lib/
+│       ├── contracts.ts
+│       ├── fhevm.ts
+│       ├── utils.ts
+│       └── wallet.ts
+│
+└── .env.local.example
 ```
 
 #### **Key Design Patterns**
 
-**Provider Pattern for State Management:**
+**Hook-Based State Management:**
 ```typescript
-// Context-based state management
-const FHEVMProvider = ({ children }) => {
-  const [fhevmInstance, setFhevmInstance] = useState(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+// Actual implementation uses direct hooks instead of providers
+// hooks/useFHEVM.ts
+export const useFHEVM = (contractAddress?: string) => {
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
-  return (
-    <FHEVMContext.Provider value={{ fhevmInstance, isInitialized }}>
-      {children}
-    </FHEVMContext.Provider>
-  );
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [loadingStates, setLoadingStates] = useState<LoadingStates>({
+    initializing: false,
+    refreshing: false,
+    decrypting: false,
+    incrementing: false,
+    decrementing: false,
+    resetting: false,
+  });
+
+  const initialize = useCallback(async () => {
+    if (!walletClient || !address || !isConnected) return;
+
+    const provider = new ethers.BrowserProvider(walletClient);
+    const signer = await provider.getSigner();
+
+    await fhevmClient.initialize(provider, signer);
+    // ... contract initialization
+  }, [walletClient, address, isConnected, contractAddress]);
+
+  return {
+    isInitialized,
+    isLoading: Object.values(loadingStates).some(loading => loading),
+    loadingStates,
+    contract,
+    encryptedCount,
+    decryptedCount,
+    canDecrypt,
+    incrementCounter,
+    decrementCounter,
+    resetCounter,
+    refreshCount,
+    decryptCount,
+    error,
+  };
 };
 ```
 
-**Hook-Based Architecture:**
+**Component-Based Architecture:**
 ```typescript
-// Custom hooks for clean separation of concerns
-const useFHEVM = () => {
-  // Encryption/decryption logic
-};
+// Direct hook usage in components
+export function Counter({ contractAddress }: CounterProps) {
+  const { isConnected } = useAccount();
+  const [inputValue, setInputValue] = useState('');
 
-const useContract = () => {
-  // Smart contract interactions
-};
+  const {
+    isInitialized,
+    isLoading,
+    encryptedCount,
+    decryptedCount,
+    canDecrypt,
+    incrementCounter,
+    decrementCounter,
+    resetCounter,
+    refreshCount,
+    decryptCount,
+    error,
+  } = useFHEVM(contractAddress);
 
-const useWallet = () => {
-  // Wallet connection management
-};
+  // Component logic...
+}
 ```
 
 ### 2. **Smart Contract Layer**
@@ -119,310 +167,273 @@ const useWallet = () => {
 ```
 contracts/
 ├── contracts/
-│   ├── FHECounter.sol         # Main application contract
-│   ├── interfaces/
-│   │   └── IFHECounter.sol    # Contract interface
-│   └── utils/
-│       └── AccessControl.sol  # Access control utilities
+│   ├── FHECounter.sol
 ├── deploy/
-│   ├── 00-deploy-counter.ts   # Deployment script
-│   └── verify.ts              # Contract verification
-├── test/
-│   ├── FHECounter.test.ts     # Comprehensive tests
-│   └── utils/
-│       └── fhevm.ts           # Test utilities
-└── hardhat.config.ts          # Hardhat configuration
+│   ├── deploy.ts
+├── tasks/
+│   ├── account.ts
+│   └── FHECounter.ts
+└── hardhat.config.ts
 ```
 
 #### **Contract Design Principles**
 
 **Encrypted State Management:**
 ```solidity
-contract FHECounter {
-    euint32 private _count;          // Encrypted counter value
-    mapping(address => euint32) private _userCounts; // Per-user counts
+// Use encrypted types for sensitive data
+euint32 private _count;  // Encrypted counter value
 
-    // Events for off-chain tracking
-    event CountUpdated(address indexed user, string operation);
+// Initialize with encrypted zero
+constructor() {
+    _count = FHE.asEuint32(0);
+    FHE.allowThis(_count);  // Grant contract access
 }
 ```
 
-**Access Control List (ACL) Management:**
+**Access Control Lists (ACL):**
 ```solidity
-// Grant permissions for encrypted data access
-function grantAccess(euint32 encryptedValue, address user) internal {
-    FHE.allowThis(encryptedValue);  // Contract access
-    FHE.allow(encryptedValue, user); // User access
-}
-```
-
-**Secure Operation Patterns:**
-```solidity
-function secureIncrement(externalEuint32 input, bytes calldata proof) external {
-    // 1. Validate and convert input
-    euint32 encryptedInput = FHE.fromExternal(input, proof);
-
-    // 2. Perform encrypted computation
+// Grant permissions after operations
+function increment(externalEuint32 inputEuint32, bytes calldata inputProof) external {
+    euint32 encryptedInput = FHE.fromExternal(inputEuint32, inputProof);
     _count = FHE.add(_count, encryptedInput);
-
-    // 3. Update access permissions
-    grantAccess(_count, msg.sender);
-
-    // 4. Emit event
-    emit CountUpdated(msg.sender, "increment");
+    
+    // Update ACL: Contract and user access
+    FHE.allowThis(_count);
+    FHE.allow(_count, msg.sender);
 }
 ```
 
-### 3. **Encryption Layer**
-
-#### **FHEVM Client Architecture**
-```typescript
-class FHEVMClient {
-  private static instance: FhevmInstance | null = null;
-
-  // Singleton pattern for instance management
-  public static async initialize(config: FHEVMConfig) {
-    if (!this.instance) {
-      this.instance = await createInstance(config);
-    }
-    return this.instance;
-  }
-
-  // Type-safe encryption methods
-  public static async encrypt32(value: number): Promise<EncryptedValue> {
-    return await this.instance.encrypt32(value);
-  }
-
-  public static async decrypt32(handle: string): Promise<number> {
-    return await this.instance.decrypt32(handle);
-  }
-}
-```
-
-#### **Encryption Flow**
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   User      │    │   Client    │    │ Blockchain  │
-│   Input     │───>│ Encryption  │───>│  Storage    │
-│             │    │             │    │             │
-└─────────────┘    └─────────────┘    └─────────────┘
-       │                                      │
-       │            ┌─────────────┐           │
-       └───────────>│   Zama      │<──────────┘
-                    │  Relayer    │
-                    │             │
-                    └─────────────┘
-```
-
-## 🔒 Security Architecture
-
-### **Multi-Layer Security Model**
-
-1. **Client-Side Security:**
-   - Input validation before encryption
-   - Secure key management
-   - Protection against client-side attacks
-
-2. **Transport Security:**
-   - HTTPS for all communications
-   - Secure WebSocket connections
-   - Certificate pinning
-
-3. **Blockchain Security:**
-   - Access control lists (ACL)
-   - Encrypted state validation
-   - Secure contract patterns
-
-4. **Cryptographic Security:**
-   - TFHE encryption scheme
-   - Threshold decryption
-   - Zero-knowledge proofs
-
-### **Access Control Architecture**
-
+**Event Emission for Off-Chain Tracking:**
 ```solidity
-// Three-tier access control
-contract FHECounter {
-    // 1. Contract-level access (always granted)
-    modifier onlyContract() {
-        require(msg.sender == address(this), "Contract access only");
-        _;
+event CountUpdated(address indexed user, string operation);
+
+// Emit after each update
+emit CountUpdated(msg.sender, "increment");
+```
+
+### 3. **FHEVM Client Layer**
+
+#### **Client-Side Encryption Flow**
+```typescript
+// lib/fhevm.ts - Actual Implementation
+import { initSDK, createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/web';
+import { ethers } from 'ethers';
+
+export class FHEVMClient {
+  private instance: any = null;
+  private provider: ethers.Provider | null = null;
+  private signer: ethers.Signer | null = null;
+  private isInitialized = false;
+
+  async initialize(provider: ethers.Provider, signer: ethers.Signer) {
+    if (this.isInitialized) return this;
+
+    if (typeof window === 'undefined') {
+      throw new Error('FHEVM client can only be initialized in browser environment');
     }
 
-    // 2. Owner-level access (administrative)
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Owner access only");
-        _;
+    this.provider = provider;
+    this.signer = signer;
+
+    // Initialize SDK once globally
+    if (!sdkInitialized) {
+      await initSDK();
+      sdkInitialized = true;
     }
 
-    // 3. User-level access (operation-based)
-    modifier hasAccess(euint32 value) {
-        require(FHE.isSenderAllowed(value), "Access denied");
-        _;
+    // Use SepoliaConfig with window.ethereum
+    const config = {
+      ...SepoliaConfig,
+      network: window.ethereum,
+    };
+
+    this.instance = await createInstance(config);
+    this.isInitialized = true;
+    return this;
+  }
+
+  async encryptUint32(value: number, userAddress: string, contractAddress: string) {
+    if (!this.instance) throw new Error('FHEVM client not initialized');
+
+    const buffer = this.instance.createEncryptedInput(contractAddress, userAddress);
+    buffer.add32(value);
+    const ciphertexts = await buffer.encrypt();
+
+    return {
+      inputEuint32: ciphertexts.handles[0],
+      inputProof: ciphertexts.inputProof,
+    };
+  }
+
+  async decryptUint32(handle: string, contractAddress: string, userAddress: string, abortSignal?: AbortSignal): Promise<number | null> {
+    if (!this.instance || !this.signer) throw new Error('FHEVM client not initialized');
+
+    try {
+      // Generate keypair and create EIP712 signature
+      const keypair = this.instance.generateKeypair();
+      const eip712 = this.instance.createEIP712(
+        keypair.publicKey,
+        [contractAddress],
+        Math.floor(Date.now() / 1000),
+        1
+      );
+
+      const signature = await this.signer.signTypedData(
+        eip712.domain,
+        { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
+        eip712.message
+      );
+
+      const result = await this.instance.userDecrypt(
+        [{ handle: handle, contractAddress: contractAddress }],
+        keypair.privateKey,
+        keypair.publicKey,
+        signature.replace(/^0x/, ''),
+        [contractAddress],
+        userAddress,
+        Math.floor(Date.now() / 1000),
+        1
+      );
+
+      return parseInt(result[handle], 10);
+    } catch (error) {
+      console.error('Error decrypting value:', error);
+      return null;
     }
+  }
+}
+
+// Global instance for use across the application
+export const fhevmClient = new FHEVMClient();
+```
+
+#### **Gas Estimation and Optimization**
+```typescript
+// Custom gas estimation for TFHE operations
+export const estimateTFHEGas = async (
+  contract: any,
+  method: string,
+  args: any[],
+  operationType: 'encrypt' | 'decrypt' | 'compute' = 'compute'
+): Promise<bigint> => {
+  try {
+    const baseEstimate = await contract[method].estimateGas(...args);
+    // Apply buffer for TFHE unpredictability (e.g., 20-50%)
+    const bufferedGas = (baseEstimate * BigInt(120)) / BigInt(100);
+    return bufferedGas;
+  } catch (error) {
+    // Fallback gas
+    return BigInt(500000);
+  }
+};
+```
+
+## ⚡ Performance Optimizations
+
+### 1. **Client-Side Optimizations:**
+```typescript
+// Memoized encryption operations
+const memoizedEncrypt = useMemo(() =>
+  debounce(async (value) => await fhevm.encrypt32(value), 300),
+  [fhevm]
+);
+
+// Optimistic UI updates
+const handleIncrement = async (value) => {
+  setOptimisticCount(prev => prev + value); // Immediate UI update
+  await performRealIncrement(value);        // Actual operation
+};
+```
+
+### 2. **Contract Optimizations:**
+```solidity
+// Batch operations to reduce gas costs
+function batchOperations(
+  externalEuint32[] calldata inputs,
+  bytes[] calldata proofs
+) external {
+  euint32 sum = FHE.asEuint32(0);
+  for (uint i = 0; i < inputs.length; i++) {
+    sum = FHE.add(sum, FHE.fromExternal(inputs[i], proofs[i]));
+  }
+  _count = FHE.add(_count, sum);
+
+  // Single ACL update
+  FHE.allowThis(_count);
+  FHE.allow(_count, msg.sender);
 }
 ```
 
-## 📊 Data Flow Architecture
-
-### **Encryption Data Flow**
-```
-User Input (42)
-    ↓
-Client Validation
-    ↓
-FHEVM.encrypt32(42)
-    ↓
-EncryptedValue { handles: [...], inputProof: [...] }
-    ↓
-Smart Contract Call
-    ↓
-FHE.fromExternal(encrypted, proof)
-    ↓
-Encrypted Storage on Blockchain
-```
-
-### **Decryption Data Flow**
-```
-Encrypted Handle from Contract
-    ↓
-ACL Permission Check
-    ↓
-User Authorization Verified
-    ↓
-FHEVM.decrypt32(handle)
-    ↓
-Plaintext Value (42)
-    ↓
-Display to User
-```
-
-### **State Management Flow**
+### 3. **Network Optimizations:**
 ```typescript
-// React state management with encryption
-const [encryptedValue, setEncryptedValue] = useState<string | null>(null);
-const [decryptedValue, setDecryptedValue] = useState<number | null>(null);
-const [isDecrypting, setIsDecrypting] = useState(false);
-
-// Encryption flow
-const handleEncrypt = async (value: number) => {
-  const encrypted = await fhevm.encrypt32(value);
-  await contract.increment(encrypted.handles[0], encrypted.inputProof);
-  // Contract updates the encrypted state
-  setEncryptedValue(await contract.getCount());
-};
-
-// Decryption flow
-const handleDecrypt = async () => {
-  setIsDecrypting(true);
-  const decrypted = await fhevm.decrypt32(encryptedValue);
-  setDecryptedValue(decrypted);
-  setIsDecrypting(false);
+// Connection pooling and retry logic
+const optimizedClient = {
+  maxRetries: 3,
+  retryDelay: 1000,
+  connectionPool: 5,
+  timeout: 30000,
 };
 ```
-
-## 🚀 Performance Architecture
-
-### **Optimization Strategies**
-
-1. **Client-Side Optimizations:**
-   ```typescript
-   // Memoized encryption operations
-   const memoizedEncrypt = useMemo(() =>
-     debounce(async (value) => await fhevm.encrypt32(value), 300),
-     [fhevm]
-   );
-
-   // Optimistic UI updates
-   const handleIncrement = async (value) => {
-     setOptimisticCount(prev => prev + value); // Immediate UI update
-     await performRealIncrement(value);        // Actual operation
-   };
-   ```
-
-2. **Contract Optimizations:**
-   ```solidity
-   // Batch operations to reduce gas costs
-   function batchOperations(
-     externalEuint32[] calldata inputs,
-     bytes[] calldata proofs
-   ) external {
-     euint32 sum = FHE.asEuint32(0);
-     for (uint i = 0; i < inputs.length; i++) {
-       sum = FHE.add(sum, FHE.fromExternal(inputs[i], proofs[i]));
-     }
-     _count = FHE.add(_count, sum);
-
-     // Single ACL update
-     FHE.allowThis(_count);
-     FHE.allow(_count, msg.sender);
-   }
-   ```
-
-3. **Network Optimizations:**
-   ```typescript
-   // Connection pooling and retry logic
-   const optimizedClient = {
-     maxRetries: 3,
-     retryDelay: 1000,
-     connectionPool: 5,
-     timeout: 30000,
-   };
-   ```
 
 ## 🧪 Testing Architecture
 
 ### **Multi-Layer Testing Strategy**
 
 1. **Unit Tests:**
-   ```typescript
-   // Individual function testing
-   describe('FHEVMClient', () => {
-     it('should encrypt 32-bit values correctly', async () => {
-       const encrypted = await FHEVMClient.encrypt32(42);
-       expect(encrypted.handles).toBeDefined();
-       expect(encrypted.inputProof).toBeDefined();
-     });
-   });
-   ```
+```typescript
+// Individual function testing (using actual API)
+describe('FHEVMClient', () => {
+  it('should encrypt 32-bit values correctly', async () => {
+    const encrypted = await fhevmClient.encryptUint32(42, userAddress, contractAddress);
+    expect(encrypted.inputEuint32).toBeDefined();
+    expect(encrypted.inputProof).toBeDefined();
+  });
+
+  it('should decrypt values with proper permissions', async () => {
+    const handle = '0x1234...';
+    const decrypted = await fhevmClient.decryptUint32(handle, contractAddress, userAddress);
+    expect(typeof decrypted).toBe('number');
+  });
+});
+```
 
 2. **Integration Tests:**
-   ```typescript
-   // Component integration testing
-   describe('Counter Component', () => {
-     it('should handle full encryption-contract-decryption flow', async () => {
-       // Setup
-       const { container } = render(<Counter />);
+```typescript
+// Component integration testing
+describe('Counter Component', () => {
+  it('should handle full encryption-contract-decryption flow', async () => {
+    // Setup
+    const { container } = render(<Counter />);
 
-       // Encrypt and submit
-       fireEvent.change(getByPlaceholder('Enter value'), { target: { value: '5' } });
-       fireEvent.click(getByText('Increment'));
+    // Encrypt and submit
+    fireEvent.change(getByPlaceholder('Enter value'), { target: { value: '5' } });
+    fireEvent.click(getByText('Increment'));
 
-       // Verify contract interaction
-       await waitFor(() => {
-         expect(mockContract.increment).toHaveBeenCalled();
-       });
-     });
-   });
-   ```
+    // Verify contract interaction
+    await waitFor(() => {
+      expect(mockContract.increment).toHaveBeenCalled();
+    });
+  });
+});
+```
 
 3. **End-to-End Tests:**
-   ```typescript
-   // Full application flow testing
-   describe('FHEVM Application E2E', () => {
-     it('should complete full user journey', async () => {
-       // Connect wallet
-       await page.click('[data-testid="connect-wallet"]');
+```typescript
+// Full application flow testing
+describe('FHEVM Application E2E', () => {
+  it('should complete full user journey', async () => {
+    // Connect wallet
+    await page.click('[data-testid="connect-wallet"]');
 
-       // Perform operations
-       await page.fill('[data-testid="value-input"]', '10');
-       await page.click('[data-testid="increment-button"]');
+    // Perform operations
+    await page.fill('[data-testid="value-input"]', '10');
+    await page.click('[data-testid="increment-button"]');
 
-       // Verify results
-       await expect(page.locator('[data-testid="counter-value"]')).toBeVisible();
-     });
-   });
-   ```
+    // Verify results
+    await expect(page.locator('[data-testid="counter-value"]')).toBeVisible();
+  });
+});
+```
 
 ## 🔧 Development Architecture
 
@@ -431,7 +442,7 @@ const handleDecrypt = async () => {
 ```yaml
 # CI/CD Pipeline Architecture
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│   GitHub    │───▶│   Build     │───▶│   Deploy    │
+│   GitHub    │───>│   Build     │───>│   Deploy    │
 │   Actions   │    │   Process   │    │   Process   │
 └─────────────┘    └─────────────┘    └─────────────┘
        │                  │                  │

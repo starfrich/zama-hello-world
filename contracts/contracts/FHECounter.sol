@@ -20,8 +20,8 @@ contract FHECounter is SepoliaConfig {
     constructor() {
         _count = FHE.asEuint32(0);  // Explicitly initialize to encrypted 0
         FHE.allowThis(_count);      // Allow the contract itself to access (permanent, for future ops)
+        FHE.allow(_count, msg.sender); // Allow deployer to decrypt initial value
         owner = msg.sender;         // Set contract owner for ACL management
-        // Note: Deployer gets access permission by default when they perform first operation
     }
 
     /// @notice Returns the current count

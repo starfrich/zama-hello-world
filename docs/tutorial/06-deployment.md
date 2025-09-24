@@ -20,7 +20,7 @@ This comprehensive guide covers deploying your FHEVM application to various envi
                                │
                                ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Development   │──▶│     Staging     │───▶│   Production    │
+│   Development   │───>│     Staging     │───>│   Production    │
 │   (Local)       │    │   (Sepolia)     │    │   (Mainnet)     │
 │                 │    │                 │    │                 │
 │ • Local Hardhat │    │ • Sepolia       │    │ • Ethereum      │
@@ -50,11 +50,13 @@ npx hardhat node
 # In a new terminal
 cd contracts
 
-# Deploy contracts
+# Deploy contracts using hardhat-deploy
 npx hardhat deploy --network localhost
 
 # Expected output:
+# deploying "FHECounter" (tx: 0x...)
 # ✅ FHECounter deployed to: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+# FHECounter contract: 0x5FbDB2315678afecb367f032d93F642f64180aa3
 ```
 
 #### **Verify Local Deployment**
@@ -62,8 +64,11 @@ npx hardhat deploy --network localhost
 # Run tests against deployed contracts
 npx hardhat test --network localhost
 
-# Check deployment info
-npx hardhat run scripts/verify-deployment.js --network localhost
+# Check deployment information
+npx hardhat deployments --network localhost
+
+# Run specific FHECounter task (if available)
+npx hardhat fhecounter:getCount --network localhost
 ```
 
 ### **2. Frontend Local Development**
@@ -82,8 +87,17 @@ Edit `.env.local`:
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your-project-id"
 NEXT_PUBLIC_FHE_COUNTER_ADDRESS="0x5FbDB2315678afecb367f032d93F642f64180aa3"
 NEXT_PUBLIC_RPC_URL="http://127.0.0.1:8545"
-NEXT_PUBLIC_RELAYER_URL="http://127.0.0.1:8545"  # Local relayer
+NEXT_PUBLIC_RELAYER_URL="http://127.0.0.1:8545"  # Local relayer (if available)
 NEXT_PUBLIC_CHAIN_ID="31337"
+NEXT_PUBLIC_GATEWAY_CHAIN_ID="31337"
+
+# FHEVM System Contracts (Local - these may not be needed for local dev)
+NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT=""
+NEXT_PUBLIC_ACL_CONTRACT=""
+NEXT_PUBLIC_HCU_LIMIT_CONTRACT=""
+NEXT_PUBLIC_KMS_VERIFIER_CONTRACT=""
+NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT=""
+NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT=""
 ```
 
 #### **Start Development Server**
@@ -127,17 +141,29 @@ npm run dev
 ```bash
 cd contracts
 
-# Set environment variables
+# Set environment variables using Hardhat vars (secure storage)
 npx hardhat vars set MNEMONIC "your twelve word mnemonic here"
 npx hardhat vars set INFURA_API_KEY "your-infura-api-key"
 npx hardhat vars set ETHERSCAN_API_KEY "your-etherscan-api-key"
+
+# Verify your configuration
+npx hardhat vars setup
+
+# Test network connectivity
+npx hardhat node-info --network sepolia
 ```
 
 #### **Get Sepolia ETH**
-Visit these faucets:
-- [Sepolia Faucet](https://sepoliafaucet.com/)
-- [Chainlink Sepolia Faucet](https://faucets.chain.link/sepolia)
-- [Alchemy Sepolia Faucet](https://sepoliafaucet.com/)
+Visit these verified faucets (updated September 2025; limits apply, e.g., 24-hour cooldowns):
+- [Alchemy Sepolia Faucet](https://www.alchemy.com/faucets/ethereum-sepolia) – Requires Alchemy account
+- [Chainlink Sepolia Faucet](https://faucets.chain.link/sepolia) – Provides 0.5 ETH + 25 LINK
+- [Google Cloud Web3 Sepolia Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia) – Free for developers
+- [Sepolia PoW Faucet](https://sepolia-faucet.pk910.de/) – Requires proof-of-work mining
+
+You'll need ETH to:
+- Deploy smart contracts
+- Pay for transaction gas fees
+- Test the frontend application
 
 ### **2. Smart Contract Deployment to Sepolia**
 
@@ -148,18 +174,21 @@ cd contracts
 # Compile contracts
 npm run compile
 
-# Deploy to Sepolia
+# Deploy to Sepolia using hardhat-deploy
 npx hardhat deploy --network sepolia
 
 # Expected output:
-# ✅ FHECounter deployed to: 0x742d35Cc6834C532532532532...
-# 💰 Gas used: 1,234,567
-# 💸 Gas cost: 0.001234567 ETH
+# deploying "FHECounter" (tx: 0x...)
+# ✅ FHECounter: deployed at 0x742d35Cc6834C532532532532... with 1234567 gas
+# FHECounter contract: 0x742d35Cc6834C532532532532...
 ```
 
 #### **Verify Contracts on Etherscan**
 ```bash
-# Verify the deployed contract
+# Verify the deployed contract (hardhat-deploy saves deployment info)
+npx hardhat etherscan-verify --network sepolia
+
+# Or manually verify specific contract
 npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
 
 # Expected output:
@@ -176,9 +205,31 @@ cd frontend
 # Update environment for Sepolia
 cp .env.local.example .env.local
 
-# Test build locally
+# Test build locally (Note: uses static export in production)
 npm run build
 npm run start
+
+# Note: The Next.js config uses static export for production builds
+# This optimizes the app for static deployment on Vercel
+```
+
+Edit `.env.local` for Sepolia:
+```env
+# Sepolia Testnet Configuration
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your-project-id"
+NEXT_PUBLIC_FHE_COUNTER_ADDRESS="0x742d35Cc6834C532532532532..."  # From deployment
+NEXT_PUBLIC_RPC_URL="https://eth-sepolia.public.blastapi.io"
+NEXT_PUBLIC_RELAYER_URL="https://relayer.testnet.zama.cloud"
+NEXT_PUBLIC_CHAIN_ID="11155111"
+NEXT_PUBLIC_GATEWAY_CHAIN_ID="55815"
+
+# FHEVM System Contracts (Sepolia Testnet)
+NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT="0x848B0066793BcC60346Da1F49049357399B8D595"
+NEXT_PUBLIC_ACL_CONTRACT="0x687820221192C5B662b25367F70076A37bc79b6c"
+NEXT_PUBLIC_HCU_LIMIT_CONTRACT="0x594BB474275918AF9609814E68C61B1587c5F838"
+NEXT_PUBLIC_KMS_VERIFIER_CONTRACT="0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC"
+NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT="0xbc91f3daD1A5F19F8390c400196e58073B6a0BC4"
+NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT="0xa02Cda4Ca3a71D7C46997716F4283aa851C28812"
 ```
 
 #### **Deploy to Vercel**
@@ -195,373 +246,107 @@ vercel login
 vercel
 
 # Follow the prompts:
-# ? Set up and deploy "~/zama-hello-world/frontend"? Y
-# ? Which scope do you want to deploy to? [Your account]
-# ? Link to existing project? N
-# ? What's your project's name? hello-fhevm
-# ? In which directory is your code located? ./
+# ? Set up and deploy "~/zama-hello-world/frontend" under a new Project? [Y/n] Y
+# ? Which scope do you want to deploy to? [Your Account]
+# ? Link to existing project? [y/N] N
+# ? What’s your project’s name? hello-fhevm-staging
+# ? In which directory is your code located? ./frontend
+# ? Want to override the settings? [y/N] N
 ```
 
 **Option 2: GitHub Integration**
-1. Push code to GitHub
-2. Connect repository to Vercel
-3. Configure environment variables in Vercel dashboard
-4. Deploy automatically on push
+1. Push code to GitHub repository
+2. Connect repo to Vercel dashboard
+3. Set environment variables in Vercel project settings
+4. Deploy automatically on push to main
 
-#### **Configure Vercel Environment Variables**
-In Vercel dashboard, add these environment variables:
-```
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID = your-project-id
-NEXT_PUBLIC_FHE_COUNTER_ADDRESS = 0x742d35Cc6834C532532532532...
-NEXT_PUBLIC_RPC_URL = https://eth-sepolia.public.blastapi.io
-NEXT_PUBLIC_RELAYER_URL = https://relayer.testnet.zama.cloud
-NEXT_PUBLIC_CHAIN_ID = 11155111
-```
+#### **Environment Variables in Vercel**
+Add these in Vercel dashboard (Project Settings > Environment Variables):
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
+- `NEXT_PUBLIC_FHE_COUNTER_ADDRESS`
+- `NEXT_PUBLIC_RPC_URL`
+- `NEXT_PUBLIC_RELAYER_URL`
+- `NEXT_PUBLIC_CHAIN_ID`
+- `NEXT_PUBLIC_GATEWAY_CHAIN_ID`
+- `NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT`
+- `NEXT_PUBLIC_ACL_CONTRACT`
+- `NEXT_PUBLIC_HCU_LIMIT_CONTRACT`
+- `NEXT_PUBLIC_KMS_VERIFIER_CONTRACT`
+- `NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT`
+- `NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT`
 
-### **4. End-to-End Testing on Sepolia**
+**Important:** Set these for both **Production** and **Preview** environments.
 
-#### **Test Checklist**
-- [ ] Contract deployed and verified on Sepolia
-- [ ] Frontend deployed and accessible
-- [ ] Wallet connects to Sepolia network
-- [ ] FHEVM encryption initializes correctly
-- [ ] Counter operations work (increment/decrement)
-- [ ] Decryption works for authorized users
-- [ ] Error handling works properly
-
-#### **Testing Script**
-```typescript
-// test-e2e.ts - Run this in your local environment
-import { createInstance } from '@zama-fhe/relayer-sdk';
-import { ethers } from 'ethers';
-
-async function testDeployment() {
-  // Test contract connection
-  const provider = new ethers.JsonRpcProvider('https://eth-sepolia.public.blastapi.io');
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
-
-  // Test FHEVM initialization
-  const fhevm = await createInstance({
-    relayerUrl: 'https://relayer.testnet.zama.cloud',
-    chainId: 11155111,
-  });
-
-  // Test encryption
-  const encrypted = await fhevm.encrypt32(42);
-  console.log('✅ Encryption successful');
-
-  // Test contract interaction
-  const tx = await contract.increment(encrypted.handles[0], encrypted.inputProof);
-  await tx.wait();
-  console.log('✅ Contract interaction successful');
-
-  console.log('🎉 All tests passed!');
-}
-
-testDeployment().catch(console.error);
-```
-
-## 🏭 Phase 3: Production Deployment Considerations
-
-### **1. Security Hardening**
-
-#### **Smart Contract Security**
-```solidity
-// Add production security measures
-contract FHECounter {
-    // Rate limiting
-    mapping(address => uint256) private lastOperationTime;
-    uint256 private constant OPERATION_COOLDOWN = 1 minutes;
-
-    modifier rateLimited() {
-        require(
-            block.timestamp >= lastOperationTime[msg.sender] + OPERATION_COOLDOWN,
-            "Operation too frequent"
-        );
-        lastOperationTime[msg.sender] = block.timestamp;
-        _;
-    }
-
-    // Emergency pause
-    bool private paused = false;
-    address private owner;
-
-    modifier whenNotPaused() {
-        require(!paused, "Contract is paused");
-        _;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
-        _;
-    }
-
-    function pause() external onlyOwner {
-        paused = true;
-    }
-
-    function unpause() external onlyOwner {
-        paused = false;
-    }
-}
-```
-
-#### **Frontend Security**
-```typescript
-// lib/security.ts
-export const securityConfig = {
-  // Content Security Policy
-  csp: {
-    'default-src': ["'self'"],
-    'script-src': ["'self'", "'unsafe-inline'", 'https://vercel.live'],
-    'connect-src': ["'self'", 'https://relayer.mainnet.zama.cloud'],
-    'img-src': ["'self'", 'data:', 'https:'],
-  },
-
-  // Rate limiting
-  rateLimits: {
-    operations: { windowMs: 60000, max: 10 }, // 10 ops per minute
-    encryption: { windowMs: 10000, max: 5 },  // 5 encryptions per 10s
-  },
-
-  // Input validation
-  validation: {
-    maxValue: 4294967295, // uint32 max
-    minValue: 0,
-    timeout: 30000, // 30s timeout for operations
-  },
-};
-```
-
-### **2. Performance Optimization**
-
-#### **Gas Optimization**
-```solidity
-// Optimized contract patterns
-contract OptimizedFHECounter {
-    // Pack related data
-    struct CounterState {
-        euint32 count;
-        uint32 lastUpdate;
-        address lastUser;
-    }
-
-    // Use events for off-chain indexing
-    event CounterBatch(
-        address indexed user,
-        uint256 indexed batchId,
-        uint8 operationCount
-    );
-
-    // Batch operations
-    function batchOperations(
-        externalEuint32[] calldata values,
-        bytes[] calldata proofs,
-        uint8[] calldata operations // 0 = add, 1 = sub
-    ) external {
-        require(values.length == proofs.length, "Length mismatch");
-        require(values.length <= 10, "Batch too large");
-
-        euint32 netChange = FHE.asEuint32(0);
-        bool isAddition = true;
-
-        // Calculate net change
-        for (uint i = 0; i < values.length; i++) {
-            euint32 value = FHE.fromExternal(values[i], proofs[i]);
-            if (operations[i] == 0) {
-                netChange = FHE.add(netChange, value);
-            } else {
-                netChange = FHE.sub(netChange, value);
-            }
-        }
-
-        // Single state update
-        _count = FHE.add(_count, netChange);
-
-        // Single ACL update
-        FHE.allowThis(_count);
-        FHE.allow(_count, msg.sender);
-
-        emit CounterBatch(msg.sender, block.number, uint8(values.length));
-    }
-}
-```
-
-#### **Frontend Optimization**
-```typescript
-// lib/optimization.ts
-import { useMemo, useCallback } from 'react';
-import { debounce } from 'lodash';
-
-export function useOptimizedFHEVM() {
-  // Memoize expensive operations
-  const memoizedEncrypt = useMemo(() =>
-    debounce(async (value: number) => {
-      return await fhevm.encrypt32(value);
-    }, 300),
-    [fhevm]
-  );
-
-  // Batch multiple operations
-  const batchOperations = useCallback(async (operations: Operation[]) => {
-    const batches = chunkArray(operations, 5); // Process in batches of 5
-
-    for (const batch of batches) {
-      const encrypted = await Promise.all(
-        batch.map(op => fhevm.encrypt32(op.value))
-      );
-
-      await contract.batchOperations(
-        encrypted.map(e => e.handles[0]),
-        encrypted.map(e => e.inputProof),
-        batch.map(op => op.type)
-      );
-    }
-  }, [fhevm, contract]);
-
-  return { memoizedEncrypt, batchOperations };
-}
-```
-
-### **3. Monitoring and Analytics**
-
-#### **Contract Monitoring**
-```typescript
-// monitoring/contract-monitor.ts
-import { EventLog } from 'ethers';
-
-class ContractMonitor {
-  private contract: Contract;
-  private metrics: MetricsCollector;
-
-  async monitorEvents() {
-    // Monitor contract events
-    this.contract.on('CountUpdated', (user: string, operation: string, event: EventLog) => {
-      this.metrics.recordOperation({
-        user,
-        operation,
-        blockNumber: event.blockNumber,
-        gasUsed: event.gasUsed,
-        timestamp: Date.now(),
-      });
-    });
-
-    // Monitor gas usage
-    this.contract.on('*', (event: EventLog) => {
-      this.metrics.recordGasUsage({
-        functionName: event.fragment?.name,
-        gasUsed: event.gasUsed,
-        gasPrice: event.gasPrice,
-      });
-    });
-  }
-
-  async healthCheck(): Promise<HealthStatus> {
-    try {
-      // Check contract state
-      const count = await this.contract.getCount();
-      const canDecrypt = await this.contract.canUserDecrypt();
-
-      return {
-        status: 'healthy',
-        lastUpdate: Date.now(),
-        contractResponding: true,
-        encryptionWorking: count !== null,
-        aclWorking: typeof canDecrypt === 'boolean',
-      };
-    } catch (error) {
-      return {
-        status: 'unhealthy',
-        error: error.message,
-        lastUpdate: Date.now(),
-      };
-    }
-  }
-}
-```
-
-#### **Frontend Analytics**
-```typescript
-// lib/analytics.ts
-export class FHEVMAnalytics {
-  private analytics: Analytics;
-
-  trackEncryption(success: boolean, duration: number, valueSize: number) {
-    this.analytics.track('fhevm_encryption', {
-      success,
-      duration,
-      valueSize,
-      timestamp: Date.now(),
-    });
-  }
-
-  trackContractInteraction(method: string, gasUsed: number, success: boolean) {
-    this.analytics.track('contract_interaction', {
-      method,
-      gasUsed,
-      success,
-      timestamp: Date.now(),
-    });
-  }
-
-  trackUserJourney(step: string, metadata?: Record<string, any>) {
-    this.analytics.track('user_journey', {
-      step,
-      ...metadata,
-      timestamp: Date.now(),
-    });
-  }
-}
-```
-
-## 🔧 Deployment Scripts and Automation
-
-### **Automated Deployment Script**
+### **4. Post-Deployment Verification**
 ```bash
-#!/bin/bash
-# deploy.sh - Complete deployment automation
+# Test contract interaction using hardhat-deploy
+npx hardhat deploy --network sepolia --verify
 
-set -e
+# Check deployment status
+npx hardhat deployments --network sepolia
 
-echo "🚀 Starting FHEVM deployment..."
+# Run FHECounter tasks (if available)
+npx hardhat fhecounter:getCount --network sepolia
 
-# Environment setup
-export NODE_ENV=production
-export DEPLOYMENT_ENV=${1:-staging}
-
-echo "📋 Deployment environment: $DEPLOYMENT_ENV"
-
-# Contract deployment
-echo "📦 Deploying smart contracts..."
-cd contracts
-npm run compile
-npx hardhat deploy --network $DEPLOYMENT_ENV
-
-# Extract contract address
-CONTRACT_ADDRESS=$(npx hardhat run scripts/get-address.js --network $DEPLOYMENT_ENV)
-echo "✅ Contract deployed to: $CONTRACT_ADDRESS"
-
-# Verify contract
-echo "🔍 Verifying contract..."
-npx hardhat verify --network $DEPLOYMENT_ENV $CONTRACT_ADDRESS
-
-# Frontend deployment
-echo "🎨 Deploying frontend..."
-cd ../frontend
-
-# Update environment with contract address
-echo "NEXT_PUBLIC_FHE_COUNTER_ADDRESS=$CONTRACT_ADDRESS" > .env.production
-
-# Build and deploy
-npm run build
-vercel --prod --env NEXT_PUBLIC_FHE_COUNTER_ADDRESS=$CONTRACT_ADDRESS
-
-echo "🎉 Deployment complete!"
-echo "📋 Contract: https://sepolia.etherscan.io/address/$CONTRACT_ADDRESS"
-echo "🌐 Frontend: https://hello-fhevm.vercel.app"
+# Check frontend
+# Visit your Vercel URL and:
+# - Connect MetaMask to Sepolia
+# - Perform encrypted operations
+# - Verify decryption works
 ```
 
-### **CI/CD Pipeline (GitHub Actions)**
+**Add Sepolia to MetaMask (if needed):**
+- Network Name: `Sepolia Test Network`
+- RPC URL: `https://eth-sepolia.public.blastapi.io`
+- Chain ID: `0xaa36a7` (11155111 in decimal)
+- Currency Symbol: `ETH`
+- Block Explorer: `https://sepolia.etherscan.io`
+
+## 🔄 Phase 3: Production-Ready Deployment (Sepolia)
+
+### **1. Production Considerations for Testnet**
+> **Note:** FHEVM mainnet is not yet available. This section covers production-grade deployment on Sepolia testnet, which serves as the current "production" environment for FHEVM applications.
+
+- **Network:** Sepolia Testnet (Chain ID: 11155111)
+- **RPC:** Use reliable providers like Infura/Alchemy for production apps
+- **Gas Optimization:** Monitor gas costs and optimize contract interactions
+- **Audits:** Conduct security audits even for testnet production apps
+- **Monitoring:** Implement comprehensive logging and error tracking
+- **Relayer:** Use Zama's production relayer on Sepolia
+
+### **2. Production-Grade Sepolia Deployment**
+```bash
+cd contracts
+
+# Use production-grade configuration
+# Ensure all environment variables are properly set
+npx hardhat vars list
+
+# Deploy with verification
+npx hardhat deploy --network sepolia
+
+# Verify all contracts
+npx hardhat etherscan-verify --network sepolia
+
+# Run post-deployment checks
+npx hardhat deployments --network sepolia
+```
+
+### **3. Production Frontend on Sepolia**
+- Deploy to Vercel Production environment with Sepolia configuration
+- Enable custom domain for professional appearance
+- Set up monitoring (Vercel Analytics, Sentry)
+- Implement rate limiting and proper error handling
+- Configure proper caching strategies
+
+### **🔮 Future: Mainnet Preparation**
+When FHEVM mainnet becomes available, consider:
+- **Security Audits:** Comprehensive smart contract audits
+- **Gas Optimization:** Mainnet gas costs will be significant
+- **Monitoring:** Production-grade monitoring and alerting
+- **Backup Plans:** Rollback and emergency procedures
+
+## 🔧 CI/CD Pipeline (GitHub Actions)
 ```yaml
 # .github/workflows/deploy.yml
 name: Deploy FHEVM Application
@@ -586,25 +371,39 @@ jobs:
           cd contracts && npm ci
           cd ../frontend && npm ci
 
-      - name: Run tests
+      - name: Run contract tests
         run: |
-          cd contracts && npm test
-          cd ../frontend && npm run test
+          cd contracts && npm run test
+
+      - name: Build frontend
+        run: |
+          cd frontend && npm run build
 
       - name: Security audit
         run: |
           cd contracts && npm audit --audit-level high
           cd ../frontend && npm audit --audit-level high
 
-  deploy-staging:
+      - name: Contract linting
+        run: |
+          cd contracts && npm run lint
+
+  deploy-sepolia:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    environment: staging
+    environment: sepolia
 
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd contracts && npm ci
+          cd ../frontend && npm ci
 
       - name: Deploy to Sepolia
         env:
@@ -622,15 +421,15 @@ jobs:
           cd frontend
           npx vercel --prod --token $VERCEL_TOKEN
 
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    environment: production
-
-    steps:
-      - name: Deploy to Mainnet
-        run: echo "Production deployment (manual approval required)"
+  # Future: When mainnet is available
+  # deploy-mainnet:
+  #   needs: deploy-sepolia
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'release'
+  #   environment: production
+  #   steps:
+  #     - name: Deploy to Mainnet
+  #       run: echo "Mainnet deployment not yet available"
 ```
 
 ## 🎯 Deployment Checklist
@@ -672,7 +471,7 @@ jobs:
 # Check balance
 npx hardhat run scripts/check-balance.js --network sepolia
 
-# Get more test ETH from faucets
+# Get more test ETH from faucets (see Phase 2)
 ```
 
 **Error: "Contract verification failed"**
@@ -709,31 +508,35 @@ vercel env add NEXT_PUBLIC_FHE_COUNTER_ADDRESS
 
 ## 🎉 Conclusion
 
-Congratulations! You've successfully deployed your FHEVM application. Your confidential dApp is now live and ready for users to interact with encrypted data on the blockchain.
+Congratulations! You've successfully deployed your FHEVM application to Sepolia testnet. Your confidential dApp is now live and ready for users to interact with encrypted data on the blockchain.
 
 ### **What You've Accomplished**
 
 - ✅ **Local Development Environment** - Complete setup for development and testing
-- ✅ **Sepolia Testnet Deployment** - Real-world testing environment
-- ✅ **Production-Ready Architecture** - Scalable, secure, and monitored
-- ✅ **CI/CD Pipeline** - Automated deployment and testing
-- ✅ **Monitoring and Analytics** - Comprehensive observability
+- ✅ **Sepolia Testnet Deployment** - Production-ready deployment on the primary FHEVM network
+- ✅ **Production-Grade Architecture** - Scalable, secure, and monitored application
+- ✅ **CI/CD Pipeline** - Automated deployment and testing workflow
+- ✅ **Frontend Integration** - Complete user interface with wallet integration
 
 ### **Next Steps for Your FHEVM Journey**
 
-1. **Add More Features**: Extend your dApp with additional FHEVM capabilities
+1. **Add More Features**: Extend your dApp with additional FHEVM capabilities (euint8, euint64, etc.)
 2. **Optimize Performance**: Continue improving gas efficiency and user experience
-3. **Community Engagement**: Share your tutorial and gather feedback
-4. **Mainnet Preparation**: Plan for eventual mainnet deployment
+3. **Community Engagement**: Share your tutorial and gather feedback from the FHEVM community
+4. **Security Practices**: Implement comprehensive testing and security audits
 5. **Contribute to Ecosystem**: Help improve FHEVM tools and documentation
+
+### **Current State of FHEVM**
+
+> **Note:** FHEVM is currently available on Sepolia testnet. Your deployed application represents a production-ready confidential dApp on the most advanced FHE blockchain network available today.
 
 ---
 
-**🎊 You've completed the Hello FHEVM tutorial series!** You're now equipped to build confidential dApps that preserve privacy while leveraging the power of blockchain technology.
+**🎊 You've completed the Hello FHEVM tutorial series!** You're now equipped to build confidential dApps that preserve privacy while leveraging the power of Fully Homomorphic Encryption on blockchain.
 
 ## 📚 Additional Resources
 
 - [Vercel Deployment Docs](https://vercel.com/docs/deployments)
-- [Hardhat Deployment Guide](https://v2.hardhat.org/tutorial/deploying-to-a-live-network)
+- [Hardhat Deployment Guide](https://v2.hardhat.org/hardhat-runner/docs/guides/deploying)
 - [Etherscan Verification](https://docs.etherscan.io/contract-verification/verify-with-hardhat)
-- [GitHub Actions for Web3](https://github.com/actions/starter-workflows)
+- [Vercel GitHub Actions Guide](https://vercel.com/guides/how-can-i-use-github-actions-with-vercel)

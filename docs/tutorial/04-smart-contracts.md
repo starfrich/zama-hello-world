@@ -51,13 +51,23 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 FHEVM supports several encrypted types:
 
 ```solidity
+euint4 private tinyNumber;       // 4-bit encrypted integer (0-15)
 euint8 private smallNumber;      // 8-bit encrypted integer (0-255)
 euint16 private mediumNumber;    // 16-bit encrypted integer (0-65535)
 euint32 private largeNumber;     // 32-bit encrypted integer (0-4294967295)
-euint64 private veryLargeNumber; // 64-bit encrypted integer
+euint64 private veryLargeNumber; // 64-bit encrypted integer (0-18446744073709551615)
+euint128 private hugeNumber;     // 128-bit encrypted integer (0-2^128-1)
+euint256 private maxNumber;      // 256-bit encrypted integer (0-2^256-1)
 ebool private encryptedFlag;     // Encrypted boolean
 eaddress private encryptedAddr;  // Encrypted address
+
+// External input types for client-side encrypted data
+externalEuint4, externalEuint8, externalEuint16, externalEuint32,
+externalEuint64, externalEuint128, externalEuint256,
+externalEbool, externalEaddress
 ```
+
+Signed variants like `eint8`, `eint16`, `eint32`, `eint64`, `eint128`, `eint256` are also available for negative values.
 
 ### 3. **Constructor and Initialization**
 
@@ -65,7 +75,8 @@ eaddress private encryptedAddr;  // Encrypted address
 constructor() {
     _count = FHE.asEuint32(0);  // Create encrypted zero
     FHE.allowThis(_count);      // Allow contract to access this value
-    owner = msg.sender;         // Set owner for ACL management
+    FHE.allow(_count, msg.sender); // Allow deployer to decrypt initial value
+    owner = msg.sender;         // Set contract owner for ACL management
 }
 ```
 
@@ -141,7 +152,21 @@ function increment(externalEuint32 inputEuint32, bytes calldata inputProof) exte
 - `FHE.add(a, b)` - Addition
 - `FHE.sub(a, b)` - Subtraction
 - `FHE.mul(a, b)` - Multiplication
-- `FHE.div(a, b)` - Division (limited precision)
+- `FHE.div(a, b)` - Division (integer division)
+- `FHE.rem(a, b)` - Remainder/modulo
+- `FHE.min(a, b)` - Minimum value
+- `FHE.max(a, b)` - Maximum value
+- `FHE.neg(a)` - Negation (for signed types)
+
+**Bitwise operations:**
+- `FHE.and(a, b)` - Bitwise AND
+- `FHE.or(a, b)` - Bitwise OR
+- `FHE.xor(a, b)` - Bitwise XOR
+- `FHE.not(a)` - Bitwise NOT
+- `FHE.shl(a, b)` - Shift left
+- `FHE.shr(a, b)` - Shift right
+- `FHE.rotl(a, b)` - Rotate left
+- `FHE.rotr(a, b)` - Rotate right
 
 ### Comparison Operations
 
@@ -169,135 +194,144 @@ euint32 result = FHE.select(
     FHE.asEuint32(0),                    // value if true
     _count                               // value if false
 );
+
+// Require operation (throws if condition is false)
+FHE.require(FHE.gt(balance, FHE.asEuint32(0)), "Balance must be positive");
 ```
 
-## 🛡️ Security Considerations
-
-### 1. **Input Validation with FHE.require**
+### Random Number Generation
 
 ```solidity
-function secureIncrement(externalEuint32 inputEuint32, bytes calldata inputProof) external {
-    euint32 encryptedInput = FHE.fromExternal(inputEuint32, inputProof);
+// Generate cryptographically secure random numbers on-chain
+euint8 random8 = FHE.randEuint8();     // Random 8-bit value
+euint16 random16 = FHE.randEuint16();  // Random 16-bit value
+euint32 random32 = FHE.randEuint32();  // Random 32-bit value
+euint64 random64 = FHE.randEuint64();  // Random 64-bit value
 
-    // Validate input range (encrypted validation)
-    euint32 maxIncrement = FHE.asEuint32(1000);
-    FHE.require(FHE.le(encryptedInput, maxIncrement), "Increment too large");
-
-    // Prevent overflow
-    euint32 maxValue = FHE.asEuint32(4294967290);
-    FHE.require(FHE.lt(_count, maxValue), "Counter overflow protection");
-
-    _count = FHE.add(_count, encryptedInput);
-
-    // ACL management
-    FHE.allowThis(_count);
-    FHE.allow(_count, msg.sender);
-}
+// Bounded random numbers
+euint32 randomBounded = FHE.rem(FHE.randEuint32(), maxValue); // [0, maxValue)
 ```
 
-### 2. **Secure Decryption Patterns**
+## 🧪 Testing Architecture
 
-```solidity
-// Owner-only decryption
-function getDecryptedCount() external view returns (uint32) {
-    require(msg.sender == owner, "Only owner can decrypt");
-    return FHE.decrypt(_count);
-}
+### **Multi-Layer Testing Strategy**
 
-// Conditional decryption
-function getCountIfAuthorized() external view returns (uint32) {
-    require(FHE.isSenderAllowed(_count), "Not authorized to decrypt");
-    return FHE.decrypt(_count);
-}
-```
+1. **Unit Tests:**
+   ```typescript
+   // Individual function testing
+   describe('FHEVMClient', () => {
+     it('should encrypt 32-bit values correctly', async () => {
+       const encrypted = await FHEVMClient.encrypt32(42);
+       expect(encrypted.handles).toBeDefined();
+       expect(encrypted.inputProof).toBeDefined();
+     });
+   });
+   ```
 
-### 3. **Protecting Against MEV**
+2. **Integration Tests:**
+   ```typescript
+   // Component integration testing
+   describe('Counter Component', () => {
+     it('should handle full encryption-contract-decryption flow', async () => {
+       // Setup
+       const { container } = render(<Counter />);
 
-```solidity
-// Bad: Exposes increment amount in events
-event CountUpdated(address indexed user, uint32 amount); // ❌
+       // Encrypt and submit
+       fireEvent.change(getByPlaceholder('Enter value'), { target: { value: '5' } });
+       fireEvent.click(getByText('Increment'));
 
-// Good: Keep amounts encrypted
-event CountUpdated(address indexed user, string operation); // ✅
+       // Verify contract interaction
+       await waitFor(() => {
+         expect(mockContract.increment).toHaveBeenCalled();
+       });
+     });
+   });
+   ```
 
-// Advanced: Encrypted event data
-event EncryptedUpdate(address indexed user, euint32 newValue); // ✅
-```
+3. **End-to-End Tests:**
+   ```typescript
+   // Full application flow testing
+   describe('FHEVM Application E2E', () => {
+     it('should complete full user journey', async () => {
+       // Connect wallet
+       await page.click('[data-testid="connect-wallet"]');
 
-## 🧪 Testing FHEVM Contracts
+       // Perform operations
+       await page.fill('[data-testid="value-input"]', '10');
+       await page.click('[data-testid="increment-button"]');
 
-### Test Structure
+       // Verify results
+       await expect(page.locator('[data-testid="counter-value"]')).toBeVisible();
+     });
+   });
+   ```
+
+### Testing FHEVM Contracts
 
 ```typescript
+import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { ethers, fhevm } from "hardhat";
+import { FHECounter, FHECounter__factory } from "../types";
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { createInstance } from "../utils/fhevm";
+import { FhevmType } from "@fhevm/hardhat-plugin";
 
 describe("FHECounter", function () {
-    let counter: any;
-    let owner: any;
-    let user: any;
-    let fhevmInstance: any;
+  let signers: { deployer: HardhatEthersSigner; alice: HardhatEthersSigner; bob: HardhatEthersSigner; };
+  let fheCounterContract: FHECounter;
+  let fheCounterContractAddress: string;
 
-    beforeEach(async function () {
-        [owner, user] = await ethers.getSigners();
+  beforeEach(async function () {
+    // Check if running in mock environment
+    if (!fhevm.isMock) {
+      console.warn(`This hardhat test suite cannot run on Sepolia Testnet`);
+      this.skip();
+    }
 
-        const FHECounter = await ethers.getContractFactory("FHECounter");
-        counter = await FHECounter.deploy();
-        await counter.waitForDeployment();
+    const ethSigners = await ethers.getSigners();
+    signers = { deployer: ethSigners[0], alice: ethSigners[1], bob: ethSigners[2] };
 
-        // Initialize FHEVM instance for encryption
-        fhevmInstance = await createInstance();
-    });
-});
-```
+    const factory = (await ethers.getContractFactory("FHECounter")) as FHECounter__factory;
+    fheCounterContract = (await factory.deploy()) as FHECounter;
+    fheCounterContractAddress = await fheCounterContract.getAddress();
+  });
 
-### Testing Encrypted Operations
+  it("encrypted count should be initialized to zero after deployment", async function () {
+    const encryptedCount = await fheCounterContract.getCount();
+    expect(encryptedCount).to.not.eq(ethers.ZeroHash);
 
-```typescript
-it("Should increment counter with encrypted value", async function () {
-    // Encrypt the increment value
-    const incrementValue = 5;
-    const encryptedIncrement = await fhevmInstance.encrypt32(incrementValue);
+    // Verify it decrypts to 0 (deployer has permission from constructor)
+    const clearCount = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCount,
+      fheCounterContractAddress,
+      signers.deployer,
+    );
+    expect(clearCount).to.eq(0);
+  });
 
-    // Perform increment operation
-    await counter.increment(encryptedIncrement.handles[0], encryptedIncrement.inputProof);
+  it("increment the counter by 1", async function () {
+    // Encrypt constant 1 as a euint32
+    const clearOne = 1;
+    const encryptedOne = await fhevm
+      .createEncryptedInput(fheCounterContractAddress, signers.alice.address)
+      .add32(clearOne)
+      .encrypt();
 
-    // Verify the operation succeeded (check events)
-    const events = await counter.queryFilter(counter.filters.CountUpdated());
-    expect(events.length).to.equal(1);
-    expect(events[0].args.operation).to.equal("increment");
-});
-```
+    const tx = await fheCounterContract
+      .connect(signers.alice)
+      .increment(encryptedOne.handles[0], encryptedOne.inputProof);
+    await tx.wait();
 
-### Testing ACL Permissions
+    const encryptedCountAfterInc = await fheCounterContract.getCount();
+    const clearCountAfterInc = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCountAfterInc,
+      fheCounterContractAddress,
+      signers.alice,
+    );
 
-```typescript
-it("Should manage ACL permissions correctly", async function () {
-    // Initially, no one can decrypt
-    expect(await counter.canUserDecrypt()).to.be.false;
-
-    // Perform operation to gain access
-    const encryptedValue = await fhevmInstance.encrypt32(10);
-    await counter.increment(encryptedValue.handles[0], encryptedValue.inputProof);
-
-    // Now user should have access
-    expect(await counter.canUserDecrypt()).to.be.true;
-});
-```
-
-### Testing Decryption
-
-```typescript
-it("Should allow owner to decrypt counter", async function () {
-    // Setup: increment counter
-    const incrementValue = 42;
-    const encryptedIncrement = await fhevmInstance.encrypt32(incrementValue);
-    await counter.increment(encryptedIncrement.handles[0], encryptedIncrement.inputProof);
-
-    // Owner should be able to decrypt
-    const decryptedValue = await counter.connect(owner).getDecryptedCount();
-    expect(decryptedValue).to.equal(42);
+    expect(Number(clearCountAfterInc)).to.eq(1);
+  });
 });
 ```
 
@@ -446,5 +480,5 @@ Now that you understand FHEVM smart contract development, you're ready to build 
 
 ## 📚 Additional Resources
 
-- [FHEVM Solidity Library Reference](https://docs.zama.ai/protocol/solidity-guides)
-- [Advanced FHE Operations](https://docs.zama.ai/protocol/examples/basic/fhe-operations)
+- [FHEVM Solidity Library Reference](https://docs.zama.ai/protocol/solidity-guides/getting-started/overview)
+- [Advanced FHE Operations](https://github.com/zama-ai/fhevm-solidity/tree/main/examples)

@@ -38,17 +38,34 @@ describe("FHECounter", function () {
     ({ fheCounterContract, fheCounterContractAddress } = await deployFixture());
   });
 
-  it("encrypted count should be uninitialized after deployment", async function () {
+  it("encrypted count should be initialized to zero after deployment", async function () {
     const encryptedCount = await fheCounterContract.getCount();
-    // Expect initial count to be bytes32(0) after deployment,
-    // (meaning the encrypted count value is uninitialized)
-    expect(encryptedCount).to.eq(ethers.ZeroHash);
+    // Our contract explicitly initializes count to encrypted 0 in constructor
+    // So we expect a valid encrypted handle, not ZeroHash
+    expect(encryptedCount).to.not.eq(ethers.ZeroHash);
+
+    // Verify it decrypts to 0
+    const clearCount = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCount,
+      fheCounterContractAddress,
+      signers.deployer, // Deployer has permission from constructor
+    );
+    expect(clearCount).to.eq(0);
   });
 
   it("increment the counter by 1", async function () {
     const encryptedCountBeforeInc = await fheCounterContract.getCount();
-    expect(encryptedCountBeforeInc).to.eq(ethers.ZeroHash);
-    const clearCountBeforeInc = 0;
+    // Our contract initializes to encrypted 0, so we expect a valid handle
+    expect(encryptedCountBeforeInc).to.not.eq(ethers.ZeroHash);
+
+    // Decrypt initial value to confirm it's 0
+    const clearCountBeforeInc = await fhevm.userDecryptEuint(
+      FhevmType.euint32,
+      encryptedCountBeforeInc,
+      fheCounterContractAddress,
+      signers.deployer, // Deployer has permission from constructor
+    );
 
     // Encrypt constant 1 as a euint32
     const clearOne = 1;
@@ -70,7 +87,7 @@ describe("FHECounter", function () {
       signers.alice,
     );
 
-    expect(clearCountAfterInc).to.eq(clearCountBeforeInc + clearOne);
+    expect(clearCountAfterInc).to.eq(Number(clearCountBeforeInc) + clearOne);
   });
 
   it("decrement the counter by 1", async function () {

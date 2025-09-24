@@ -123,12 +123,25 @@ Noisy Ciphertext → Bootstrapping → Fresh Ciphertext
 
 #### **Supported Data Types**
 ```solidity
+// Unsigned encrypted integers
+euint4   // 4-bit encrypted unsigned integer  (0 to 15)
 euint8   // 8-bit encrypted unsigned integer  (0 to 255)
 euint16  // 16-bit encrypted unsigned integer (0 to 65,535)
 euint32  // 32-bit encrypted unsigned integer (0 to 4,294,967,295)
 euint64  // 64-bit encrypted unsigned integer (0 to 18,446,744,073,709,551,615)
+euint128 // 128-bit encrypted unsigned integer (0 to 2^128-1)
+euint256 // 256-bit encrypted unsigned integer (0 to 2^256-1)
+
+// Signed encrypted integers (for negative values)
+eint8, eint16, eint32, eint64, eint128, eint256
+
+// Other encrypted types
 ebool    // Encrypted boolean (true/false)
 eaddress // Encrypted Ethereum address
+
+// External input types (for client-side encrypted data)
+externalEbool, externalEaddress, externalEuint4, externalEuint8,
+externalEuint16, externalEuint32, externalEuint64, externalEuint128, externalEuint256
 ```
 
 #### **Arithmetic Operations**
@@ -137,212 +150,56 @@ eaddress // Encrypted Ethereum address
 euint32 sum = FHE.add(a, b);      // a + b
 euint32 diff = FHE.sub(a, b);     // a - b
 euint32 product = FHE.mul(a, b);  // a × b
-euint32 quotient = FHE.div(a, b); // a ÷ b (limited precision)
+euint32 quotient = FHE.div(a, b); // a ÷ b (integer division)
+euint32 remainder = FHE.rem(a, b); // a % b (modulo)
+euint32 minimum = FHE.min(a, b);  // min(a, b)
+euint32 maximum = FHE.max(a, b);  // max(a, b)
+euint32 negated = FHE.neg(a);     // -a (for signed types)
 
 // Bitwise operations
-euint32 result = FHE.and(a, b);   // a & b
-euint32 result = FHE.or(a, b);    // a | b
-euint32 result = FHE.xor(a, b);   // a ^ b
-euint32 result = FHE.not(a);      // ~a
+euint32 result = FHE.and(a, b);   // a & b (bitwise AND)
+euint32 result = FHE.or(a, b);    // a | b (bitwise OR)
+euint32 result = FHE.xor(a, b);   // a ^ b (bitwise XOR)
+euint32 result = FHE.not(a);      // ~a (bitwise NOT)
+euint32 result = FHE.shl(a, b);   // a << b (shift left)
+euint32 result = FHE.shr(a, b);   // a >> b (shift right)
+euint32 result = FHE.rotl(a, b);  // rotate left
+euint32 result = FHE.rotr(a, b);  // rotate right
 ```
 
 #### **Comparison Operations**
 ```solidity
 // All comparisons return encrypted booleans (ebool)
-ebool isEqual = FHE.eq(a, b);     // a == b
-ebool notEqual = FHE.ne(a, b);    // a != b
-ebool lessThan = FHE.lt(a, b);    // a < b
-ebool lessEqual = FHE.le(a, b);   // a <= b
-ebool greater = FHE.gt(a, b);     // a > b
-ebool greaterEq = FHE.ge(a, b);   // a >= b
+ebool isEqual = FHE.eq(a, b);       // a == b
+ebool isNotEqual = FHE.ne(a, b);    // a != b
+ebool isLess = FHE.lt(a, b);        // a < b
+ebool isLessOrEqual = FHE.le(a, b); // a <= b
+ebool isGreater = FHE.gt(a, b);     // a > b
+ebool isGreaterOrEqual = FHE.ge(a, b); // a >= b
 ```
 
 #### **Control Flow Operations**
 ```solidity
-// Conditional selection: if condition then a else b
-euint32 result = FHE.select(condition, a, b);
+// Conditional selection (ternary operator equivalent)
+euint32 result = FHE.select(condition, ifTrue, ifFalse); // condition ? ifTrue : ifFalse
 
-// Where condition is an ebool
-ebool condition = FHE.lt(x, FHE.asEuint32(100));
-euint32 result = FHE.select(condition, x, FHE.asEuint32(0));
+// Conditional requirement (throws if condition is false)
+FHE.require(condition, "Error message"); // require(condition, message)
 ```
 
-## 🔒 Security Properties
-
-### **Semantic Security**
-TFHE provides semantic security, meaning ciphertexts reveal no information about plaintexts.
-
-**Property:**
-For any two plaintexts `m₀` and `m₁`, their ciphertexts are computationally indistinguishable.
-
-```
-Encrypt(m₀) ≈ᶜ Encrypt(m₁)
-```
-
-### **Circuit Privacy**
-Not only the inputs but also the computation itself remains hidden.
-
-**Example:**
+#### **Random Number Generation**
 ```solidity
-// The fact that we're computing max(a, b) is hidden
-euint32 maximum = FHE.select(FHE.gt(a, b), a, b);
+// Generate cryptographically secure random numbers on-chain
+euint8 random8 = FHE.randEuint8();     // Random 8-bit value
+euint16 random16 = FHE.randEuint16();  // Random 16-bit value
+euint32 random32 = FHE.randEuint32();  // Random 32-bit value
+euint64 random64 = FHE.randEuint64();  // Random 64-bit value
+
+// Bounded random numbers
+euint32 randomBounded = FHE.rem(FHE.randEuint32(), maxValue); // [0, maxValue)
 ```
 
-### **Threshold Security**
-TFHE uses threshold cryptography where multiple parties must collaborate to decrypt.
-
-**Benefits:**
-- No single point of failure
-- Distributed trust
-- Enhanced security
-
-## ⚡ Performance Characteristics
-
-### **Computational Complexity**
-
-#### **Operation Costs (Relative)**
-```
-Operation Type    | Relative Cost | Use Case
-------------------|---------------|------------------
-Addition          | 1x           | Counters, sums
-Subtraction       | 1x           | Differences
-Multiplication    | 100x         | Products, scaling
-Division          | 1000x        | Ratios (limited)
-Comparison        | 50x          | Conditionals
-Bootstrapping     | 10000x       | Noise refresh
-```
-
-#### **Gas Costs in FHEVM**
-```solidity
-// Estimated gas costs (approximate)
-FHE.add(a, b);      // ~50,000 gas
-FHE.mul(a, b);      // ~500,000 gas
-FHE.lt(a, b);       // ~200,000 gas
-FHE.select(c, a, b); // ~300,000 gas
-```
-
-### **Optimization Strategies**
-
-#### **1. Minimize Expensive Operations**
-```solidity
-// Bad: Multiple divisions
-euint32 avg1 = FHE.div(sum1, count);
-euint32 avg2 = FHE.div(sum2, count);
-euint32 avg3 = FHE.div(sum3, count);
-
-// Good: Single division
-euint32 totalSum = FHE.add(FHE.add(sum1, sum2), sum3);
-euint32 totalAvg = FHE.div(totalSum, FHE.mul(count, FHE.asEuint32(3)));
-```
-
-#### **2. Batch Operations**
-```solidity
-// Bad: Sequential operations
-for (uint i = 0; i < values.length; i++) {
-    result = FHE.add(result, values[i]);
-}
-
-// Good: Tree reduction
-function batchAdd(euint32[] memory values) returns (euint32) {
-    if (values.length == 1) return values[0];
-
-    euint32[] memory nextLevel = new euint32[]((values.length + 1) / 2);
-    for (uint i = 0; i < values.length; i += 2) {
-        if (i + 1 < values.length) {
-            nextLevel[i/2] = FHE.add(values[i], values[i+1]);
-        } else {
-            nextLevel[i/2] = values[i];
-        }
-    }
-    return batchAdd(nextLevel);
-}
-```
-
-#### **3. Precompute Constants**
-```solidity
-// Bad: Repeated encryption
-function processItems(uint32[] calldata items) external {
-    for (uint i = 0; i < items.length; i++) {
-        euint32 threshold = FHE.asEuint32(100); // Repeated encryption
-        if (FHE.decrypt(FHE.gt(FHE.asEuint32(items[i]), threshold))) {
-            // Process item
-        }
-    }
-}
-
-// Good: Precomputed constants
-euint32 private constant THRESHOLD = FHE.asEuint32(100);
-
-function processItems(uint32[] calldata items) external {
-    for (uint i = 0; i < items.length; i++) {
-        if (FHE.decrypt(FHE.gt(FHE.asEuint32(items[i]), THRESHOLD))) {
-            // Process item
-        }
-    }
-}
-```
-
-## 🎯 Practical Examples
-
-### **Example 1: Encrypted Auction**
-```solidity
-contract EncryptedAuction {
-    euint32 private highestBid;
-    address private highestBidder;
-
-    function bid(externalEuint32 bidAmount, bytes calldata proof) external {
-        euint32 encryptedBid = FHE.fromExternal(bidAmount, proof);
-
-        // Compare with current highest bid
-        ebool isHigher = FHE.gt(encryptedBid, highestBid);
-
-        // Update if higher (using select for constant-time execution)
-        highestBid = FHE.select(isHigher, encryptedBid, highestBid);
-
-        // Update bidder (this reveals the winner, but not the bid amount)
-        if (FHE.decrypt(isHigher)) {
-            highestBidder = msg.sender;
-        }
-
-        // Grant access to the bidder for their own bid
-        FHE.allow(encryptedBid, msg.sender);
-    }
-}
-```
-
-### **Example 2: Private Voting**
-```solidity
-contract PrivateVoting {
-    euint32 private yesVotes;
-    euint32 private noVotes;
-    mapping(address => ebool) private hasVoted;
-
-    function vote(externalEuint32 choice, bytes calldata proof) external {
-        // Ensure haven't voted before
-        require(!FHE.decrypt(hasVoted[msg.sender]), "Already voted");
-
-        euint32 encryptedChoice = FHE.fromExternal(choice, proof);
-
-        // choice should be 0 (no) or 1 (yes)
-        ebool isYes = FHE.eq(encryptedChoice, FHE.asEuint32(1));
-
-        // Increment appropriate counter
-        yesVotes = FHE.add(yesVotes, FHE.select(isYes, FHE.asEuint32(1), FHE.asEuint32(0)));
-        noVotes = FHE.add(noVotes, FHE.select(isYes, FHE.asEuint32(0), FHE.asEuint32(1)));
-
-        // Mark as voted
-        hasVoted[msg.sender] = FHE.asEbool(true);
-    }
-
-    function getResults() external view returns (uint32, uint32) {
-        // Only admin or after voting period
-        require(msg.sender == admin || block.timestamp > votingEnd, "Not authorized");
-        return (FHE.decrypt(yesVotes), FHE.decrypt(noVotes));
-    }
-}
-```
-
-### **Example 3: Confidential Token Balance**
+## 🔒 **Confidential Token Balance**
 ```solidity
 contract ConfidentialToken {
     mapping(address => euint32) private balances;
@@ -374,19 +231,20 @@ contract ConfidentialToken {
 ### **Current Limitations**
 
 1. **Performance:**
-   - FHE operations are 100-10,000x slower than plaintext
-   - High gas costs for complex computations
-   - Limited by blockchain block gas limits
+   - FHE operations have higher gas costs than plaintext operations
+   - Complex computations may approach block gas limits
+   - Bootstrap operations (when needed) are computationally intensive
 
 2. **Functionality:**
-   - No floating-point arithmetic
-   - Limited division precision
-   - Complex control flow is expensive
+   - No native floating-point arithmetic (use fixed-point representations)
+   - Integer division with limited precision
+   - Complex conditional logic requires careful optimization
 
 3. **Data Types:**
-   - Fixed-size integers only
-   - No dynamic arrays of encrypted data
-   - Limited string operations
+   - Fixed-size encrypted integers (euint4 to euint256)
+   - No dynamic arrays of encrypted elements
+   - String operations must be implemented as byte operations
+   - External inputs require proof validation
 
 ### **Design Considerations**
 
@@ -398,23 +256,27 @@ euint16 inventory; // 0-65k, sufficient for item counts
 euint32 balance;   // 0-4B, sufficient for token amounts
 ```
 
-#### **2. Minimize Decryptions**
+#### **2. Minimize Complex Computations**
 ```solidity
-// Bad: Frequent decryptions
-if (FHE.decrypt(FHE.gt(balance, threshold))) {
-    if (FHE.decrypt(FHE.lt(balance, upperLimit))) {
-        // Process
-    }
-}
+// Bad: Complex nested operations
+ebool result = FHE.and(
+    FHE.gt(balance, threshold),
+    FHE.and(
+        FHE.lt(balance, upperLimit),
+        FHE.eq(status, activeStatus)
+    )
+);
 
-// Good: Single decryption
-ebool inRange = FHE.and(
+// Good: Structured operations
+ebool balanceInRange = FHE.and(
     FHE.gt(balance, threshold),
     FHE.lt(balance, upperLimit)
 );
-if (FHE.decrypt(inRange)) {
-    // Process
-}
+ebool isActive = FHE.eq(status, activeStatus);
+ebool result = FHE.and(balanceInRange, isActive);
+
+// Note: Decryption happens off-chain via client SDK
+// The encrypted result can be returned to client for decryption
 ```
 
 #### **3. Consider Access Patterns**
@@ -502,5 +364,5 @@ With a solid understanding of FHE fundamentals, you're ready to implement these 
 
 - [Homomorphic Encryption Standardization](https://homomorphicencryption.org/)
 - [Learning With Errors Problem](https://en.wikipedia.org/wiki/Learning_with_errors)
-- [Bootstrapping in FHE](https://eprint.iacr.org/2011/277.pdf)
+- [Bootstrapping in FHE](https://eprint.iacr.org/2009/453.pdf)
 - [Zama's TFHE Implementation](https://github.com/zama-ai/tfhe-rs)

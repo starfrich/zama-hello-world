@@ -15,7 +15,7 @@ Setting up your development environment for FHEVM development requires several t
 ### System Requirements
 
 - **Operating System**: Windows, macOS, or Linux
-- **Node.js**: Version 20 or higher
+- **Node.js**: Version 20 or higher (LTS recommended)
 - **Memory**: At least 8GB RAM (16GB recommended for large projects)
 - **Storage**: At least 2GB free space
 
@@ -48,35 +48,45 @@ pnpm is faster and more efficient than npm for large projects with many dependen
 
 ### Clone the Repository
 ```bash
-git clone https://github.com/starfrich/zama-hello-world.git
+git clone https://github.com/starfrich/zama-hello-world
 cd zama-hello-world
 ```
 
 ### Install Dependencies
 
-**For the entire monorepo:**
+This project consists of separate contracts and frontend directories that need to be set up individually:
+
+**Install Contracts Dependencies:**
 ```bash
-# Using npm
+cd contracts
 npm install
-
-# Using pnpm (recommended)
-pnpm install
 ```
 
-**For individual packages:**
+**Install Frontend Dependencies:**
 ```bash
-# Contracts only
-cd contracts && npm install
-
-# Frontend only
-cd frontend && npm install
+cd frontend
+npm install
 ```
+
+### Key Dependencies Included
+
+**Contracts (`@fhevm/solidity` ecosystem):**
+- `@fhevm/solidity`: ^0.8.0 - Core FHEVM library
+- `@fhevm/hardhat-plugin`: ^0.1.0 - Hardhat integration
+- `@zama-fhe/oracle-solidity`: ^0.1.0 - Oracle functionality
+- `encrypted-types`: ^0.0.4 - Type definitions
+
+**Frontend (Next.js with Crypto Integration):**
+- `@rainbow-me/rainbowkit`: ^2.2.8 - Wallet connection
+- `@zama-fhe/relayer-sdk`: ^0.2.0 - FHEVM relayer integration
+- `ethers`: ^6.15.0 - Ethereum interactions
+- `wagmi`: ^2.17.1 - React hooks for Ethereum
 
 ## 🔧 Step 3: Configure Environment Variables
 
 ### Contracts Environment Setup
 
-Navigate to the contracts directory and set up your environment variables:
+Navigate to the contracts directory and set up your environment variables using the Hardhat template:
 
 ```bash
 cd contracts
@@ -84,7 +94,7 @@ cd contracts
 # Set your mnemonic (12-word seed phrase)
 npx hardhat vars set MNEMONIC
 
-# Set Infura API key (optional but recommended)
+# Set Infura API key (optional but recommended for reliable RPC)
 npx hardhat vars set INFURA_API_KEY
 
 # Set Etherscan API key for contract verification (optional)
@@ -104,6 +114,8 @@ INFURA_API_KEY="your-infura-api-key"
 ETHERSCAN_API_KEY="your-etherscan-api-key"
 ```
 
+**Defaults (for testing):** If not set, Hardhat uses `MNEMONIC = "test test test test test test test test test test test junk"` and `INFURA_API_KEY = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"`.
+
 ### Frontend Environment Setup
 
 Navigate to the frontend directory:
@@ -116,15 +128,23 @@ cp .env.local.example .env.local
 
 Edit `.env.local` with your values:
 ```env
+# FHEVM Configuration (Sepolia Testnet)
+NEXT_PUBLIC_RPC_URL=https://eth-sepolia.public.blastapi.io
+NEXT_PUBLIC_RELAYER_URL=https://relayer.testnet.zama.cloud
+
+# FHEVM System Contracts (Sepolia Testnet)
+NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT=0x848B0066793BcC60346Da1F49049357399B8D595
+NEXT_PUBLIC_ACL_CONTRACT=0x687820221192C5B662b25367F70076A37bc79b6c
+NEXT_PUBLIC_HCU_LIMIT_CONTRACT=0x594BB474275918AF9609814E68C61B1587c5F838
+NEXT_PUBLIC_KMS_VERIFIER_CONTRACT=0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC
+NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT=0xbc91f3daD1A5F19F8390c400196e58073B6a0BC4
+NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT=0xa02Cda4Ca3a71D7C46997716F4283aa851C28812
+
+# Application Contract Addresses
+NEXT_PUBLIC_FHE_COUNTER_ADDRESS=
+
 # WalletConnect Project ID (get from https://cloud.walletconnect.com)
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your-project-id"
-
-# Contract address (will be set after deployment)
-NEXT_PUBLIC_FHE_COUNTER_ADDRESS=""
-
-# Network configuration (optional - defaults are provided)
-NEXT_PUBLIC_RPC_URL="https://eth-sepolia.public.blastapi.io"
-NEXT_PUBLIC_RELAYER_URL="https://relayer.testnet.zama.cloud"
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
 ```
 
 ## 🔑 Step 4: Wallet Configuration
@@ -148,10 +168,10 @@ Add the Sepolia testnet to MetaMask:
 
 ### Get Test ETH
 
-Get Sepolia ETH from these faucets:
-- [Sepolia Faucet](https://sepoliafaucet.com/)
-- [Alchemy Sepolia Faucet](https://sepoliafaucet.com/)
-- [Chainlink Sepolia Faucet](https://faucets.chain.link/sepolia)
+Get Sepolia ETH from these active faucets (verified as of September 2025):
+- [Alchemy Sepolia Faucet](https://www.alchemy.com/faucets/ethereum-sepolia) (0.1 ETH/72 hrs, requires 0.001 ETH mainnet balance and some transaction history)
+- [Google Cloud Web3 Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia) (up to 0.05 ETH daily, no strict requirements but may need Google account)
+- [Chainlink Sepolia Faucet](https://faucets.chain.link/sepolia) (multiple assets available, Requests for native tokens require the user to hold at least 1 LINK on Ethereum Mainnet. This restriction does not apply to requests for testnet LINK.)
 
 You'll need ETH to:
 - Deploy smart contracts
@@ -182,10 +202,15 @@ Compiled 5 Solidity files successfully
 
 Expected output for tests:
 ```
-✓ Should deploy and initialize correctly
-✓ Should increment counter
-✓ Should decrypt counter for owner
+✓ encrypted count should be initialized to zero after deployment
+✓ increment the counter by 1
+✓ decrement the counter by 1
+
+3 passing
+1 pending
 ```
+
+**Note:** The message "This hardhat test suite can only run on Sepolia Testnet" indicates that some tests are specifically designed for Sepolia testnet. The local mock tests should all pass successfully as shown above.
 
 ### Test Frontend Setup
 
@@ -203,6 +228,8 @@ npm run dev
 ```
 
 The frontend should start at `http://localhost:3000`.
+
+**Note:** You may see some warnings during the build process related to missing dependencies in React hooks or MetaMask SDK modules. These are non-critical warnings that don't prevent the application from working properly.
 
 ## 🔧 Step 6: Development Tools Setup
 
@@ -230,12 +257,12 @@ Create `.vscode/settings.json` in your project root:
 
 ## 🐛 Step 7: Common Setup Issues
 
-### Issue: "Cannot find module 'fhevm'"
+### Issue: "Cannot find module '@fhevm/solidity'"
 
 **Solution:**
 ```bash
 cd contracts
-npm install fhevm
+npm install @fhevm/solidity @fhevm/hardhat-plugin
 ```
 
 ### Issue: "Invalid mnemonic"
