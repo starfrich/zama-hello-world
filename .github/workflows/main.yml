@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, new]
+  pull_request:
+    branches: [main, new]
+
+jobs:
+  contracts:
+    name: Contracts (Hardhat)
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          cd contracts
+          npm install
+
+      - name: Compile contracts
+        run: |
+          cd contracts
+          npm run compile
+
+      - name: Run tests
+        run: |
+          cd contracts
+          npm test
+
+  frontend:
+    name: Frontend
+    runs-on: self-hosted
+    needs: contracts
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+        env:
+          NEXT_PUBLIC_RPC_URL: ${{ secrets.NEXT_PUBLIC_RPC_URL }}
+          NEXT_PUBLIC_RELAYER_URL: ${{ secrets.NEXT_PUBLIC_RELAYER_URL }}
+          NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT: ${{ secrets.NEXT_PUBLIC_FHEVM_EXECUTOR_CONTRACT }}
+          NEXT_PUBLIC_ACL_CONTRACT: ${{ secrets.NEXT_PUBLIC_ACL_CONTRACT }}
+          NEXT_PUBLIC_HCU_LIMIT_CONTRACT: ${{ secrets.NEXT_PUBLIC_HCU_LIMIT_CONTRACT }}
+          NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT: ${{ secrets.NEXT_PUBLIC_INPUT_VERIFIER_CONTRACT }}
+          NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT: ${{ secrets.NEXT_PUBLIC_DECRYPTION_ORACLE_CONTRACT }}
+          NEXT_PUBLIC_FHE_COUNTER_ADDRESS: ${{ secrets.NEXT_PUBLIC_FHE_COUNTER_ADDRESS }}
+          NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
