@@ -7,7 +7,8 @@
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "serve": "npx serve@latest -l tcp://127.0.0.1:3000 out"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
